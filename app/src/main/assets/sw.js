@@ -1,4 +1,4 @@
-var CACHE = 'expenses-v20';
+var CACHE = 'expenses-v24';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', function (e) {

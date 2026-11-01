@@ -14,12 +14,14 @@ public final class NotifQueue {
 
     private NotifQueue() {}
 
-    public static synchronized void put(Context ctx, String pkg, String text, long when) {
+    public static synchronized void put(Context ctx, String pkg, String app, String title, String text, long when) {
         try {
             SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
             JSONArray arr = new JSONArray(sp.getString(KEY, "[]"));
             JSONObject o = new JSONObject();
             o.put("p", pkg);
+            o.put("a", app);
+            o.put("ti", title);
             o.put("t", text);
             o.put("w", when);
             arr.put(o);

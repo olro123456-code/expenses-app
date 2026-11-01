@@ -1,6 +1,7 @@
 package com.olro.expenses;
 
 import android.app.Notification;
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -43,7 +44,17 @@ public class NotifService extends NotificationListenerService {
             if (!big.isEmpty() && !big.equals(text)) sb.append('\n').append(big);
             String all = sb.toString().trim();
             if (all.length() < 5) return;
-            NotifQueue.put(this, pkg, all, sbn.getPostTime());
+            String app = pkg;
+            try {
+                @SuppressWarnings("deprecation")
+                ApplicationInfo ai = (ApplicationInfo) e.getParcelable("android.appInfo");
+                if (ai != null) {
+                    CharSequence lbl = ai.loadLabel(getPackageManager());
+                    if (lbl != null && lbl.length() > 0) app = lbl.toString();
+                }
+            } catch (Exception ignored2) {
+            }
+            NotifQueue.put(this, pkg, app, title, all, sbn.getPostTime());
             MainActivity.ping();
         } catch (Exception ignored) {
         }
