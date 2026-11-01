@@ -1,6 +1,7 @@
 package com.olro.expenses;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
@@ -11,6 +12,7 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
+import android.webkit.JsResult;
 import android.webkit.ServiceWorkerClient;
 import android.webkit.ServiceWorkerController;
 import android.webkit.ValueCallback;
@@ -101,12 +103,37 @@ public class MainActivity extends Activity {
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
+            public boolean onJsAlert(WebView v, String url, String message, final JsResult r) {
+                new AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, (d, w) -> r.confirm())
+                        .setOnCancelListener(d -> r.cancel())
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView v, String url, String message, final JsResult r) {
+                new AlertDialog.Builder(MainActivity.this)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, (d, w) -> r.confirm())
+                        .setNegativeButton(android.R.string.cancel, (d, w) -> r.cancel())
+                        .setOnCancelListener(d -> r.cancel())
+                        .show();
+                return true;
+            }
+
+            @Override
             public boolean onShowFileChooser(WebView w, ValueCallback<Uri[]> cb, FileChooserParams p) {
                 if (fileCb != null) fileCb.onReceiveValue(null);
                 fileCb = cb;
                 camUri = null;
+                boolean wantsImage = false;
+                String[] acc = p.getAcceptTypes();
+                if (acc != null) for (String a : acc) if (a != null && a.startsWith("image")) wantsImage = true;
                 Intent cam = null;
                 try {
+                    if (!wantsImage) throw new Exception("no camera");
                     File dir = new File(getCacheDir(), "cam");
                     dir.mkdirs();
                     File f = File.createTempFile("cap", ".jpg", dir);
@@ -125,7 +152,7 @@ public class MainActivity extends Activity {
                     } else {
                         Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
                         pick.addCategory(Intent.CATEGORY_OPENABLE);
-                        pick.setType("image/*");
+                        pick.setType(wantsImage ? "image/*" : "*/*");
                         go = Intent.createChooser(pick, "");
                         if (cam != null) go.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cam});
                     }
@@ -182,6 +209,15 @@ public class MainActivity extends Activity {
         else super.onBackPressed();
     }
 
+    private void toast(final String m) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(MainActivity.this, m, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
     /** Functions the page can call. */
     public class Bridge {
         @JavascriptInterface
@@ -224,8 +260,10 @@ public class MainActivity extends Activity {
                 if (os == null) return false;
                 os.write(text.getBytes(StandardCharsets.UTF_8));
                 os.close();
+                toast("הגיבוי נשמר בתיקיית ההורדות: " + name);
                 return true;
             } catch (Exception e) {
+                toast("שמירת הגיבוי נכשלה");
                 return false;
             }
         }
