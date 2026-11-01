@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>מעקב הוצאות אישי</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="הוצאות">
+
+<style>
+:root{--bg:#f3f4f6;--card:#fff;--text:#1f2937;--muted:#6b7280;--line:#e5e7eb;--blue:#2563eb;--green:#16a34a;--red:#dc2626;--chip:#e5e7eb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111827;--card:#1f2937;--text:#f3f4f6;--muted:#9ca3af;--line:#374151;--chip:#374151;--green:#4ade80;--red:#f87171}}
+:root[data-theme="dark"]{--bg:#111827;--card:#1f2937;--text:#f3f4f6;--muted:#9ca3af;--line:#374151;--chip:#374151;--green:#4ade80;--red:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;padding:16px 16px 110px;background:var(--bg);color:var(--text);font-family:"Heebo",Arial,sans-serif;max-width:560px;margin-inline:auto}
+h1{font-size:22px;margin:4px 0 14px}
+h3{margin:0 0 8px;font-size:16px}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;border:1px solid var(--line)}
+input,select,button,textarea{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid var(--line);font-size:16px;box-sizing:border-box;background:var(--card);color:var(--text);font-family:inherit}
+button{background:var(--blue);color:#fff;border:none;font-weight:bold}
+.tabs{display:flex;gap:8px}
+.tabs button{background:var(--chip);color:var(--text);margin:0 0 6px}
+.tabs button.active{background:var(--blue);color:#fff}
+.tabs button.active.inc{background:#16a34a}
+.balance{font-size:28px;font-weight:bold;text-align:center}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.sum{display:flex;justify-content:space-between;margin-top:10px}
+.del{width:auto;padding:4px 10px;margin:0 10px;background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:normal;font-size:14px}
+.muted{color:var(--muted)}
+button:disabled{opacity:.35}
+#bottomNav{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));display:flex;justify-content:space-around;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:6px;z-index:40;max-width:536px;margin-inline:auto}
+#bottomNav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;margin:0;padding:6px 4px;background:transparent;color:var(--muted);border-radius:16px;font-size:11px;font-weight:normal}
+#bottomNav button.active{background:var(--chip);color:var(--blue);font-weight:bold}
+.thumb{height:44px;border-radius:6px;vertical-align:middle}
+.pk-btn{display:flex;justify-content:space-between;align-items:center;background:var(--card);color:var(--text);border:1px solid var(--line);font-weight:normal;text-align:start}
+.pk-list{border:1px solid var(--line);border-radius:10px;background:var(--card);margin:-2px 0 8px;max-height:280px;overflow:auto}
+.pk-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.pk-item:last-child{border-bottom:none}
+.pk-x{width:auto;margin:0;padding:2px 9px;background:transparent;color:var(--muted);border:none;font-size:15px;font-weight:normal}
+</style>
+</head>
+<body>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px">
+  <h1 data-i18n="title" style="margin:4px 0"></h1>
+  <select id="langSel" onchange="setLang(this.value)" aria-label="Language" style="width:auto;margin:0;padding:8px">
+    <option value="he">עברית</option>
+    <option value="en">English</option>
+    <option value="ru">Русский</option>
+    <option value="ar">العربية</option>
+  </select>
+</div>
+<div id="netStatus" class="muted" style="margin:0 0 12px;font-size:14px"></div>
+<div id="toast" class="card" style="display:none;border-color:var(--blue)"></div>
+<div id="backupNag" class="card" style="display:none">
+  <b data-i18n="nag_title"></b>
+  <button onclick="downloadBackup()" data-i18n="nag_btn"></button>
+</div>
+
+<div id="pageMain">
+<div class="card">
+  <div class="sum" style="margin:0 0 10px;align-items:center">
+    <button class="del" style="margin:0" onclick="moveMonth(-1)" data-i18n="prev_month"></button>
+    <b id="monthLabel"></b>
+    <button class="del" style="margin:0" id="nextMonthBtn" onclick="moveMonth(1)" data-i18n="next_month"></button>
+  </div>
+  <div class="sum" style="margin:0 0 10px"><span data-i18n="carry_lbl"></span><b id="carry">0</b></div>
+  <div class="sum" style="margin-top:0">
+    <span><span data-i18n="incomes_lbl"></span> <b id="totalIncome" class="pos">0.00</b></span>
+    <span><span data-i18n="expenses_lbl"></span> <b id="totalExpense" class="neg">0.00</b></span>
+  </div>
+  <div class="balance" id="balance" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"></div>
+</div>
+
+<div class="card" id="scanCard">
+  <input type="file" id="receiptCamera" accept="image/*" capture="environment" style="display:none" onchange="scanReceipt(this)">
+  <input type="file" id="receiptInput" accept="image/*" style="display:none" onchange="scanReceipt(this)">
+  <div style="display:flex;gap:8px">
+    <button onclick="document.getElementById('receiptCamera').click()" data-i18n="scan_camera"></button>
+    <button onclick="document.getElementById('receiptInput').click()" style="background:var(--chip);color:var(--text)" data-i18n="scan_gallery"></button>
+  </div>
+  <button id="warmBtn" class="del" style="display:block;width:100%;margin:6px 0" onclick="warmOcr()" data-i18n="warm_btn"></button>
+  <div id="scanStatus" class="muted"></div>
+  <div id="dupBox" style="display:none;border:2px solid var(--red);border-radius:10px;padding:10px;margin-top:8px">
+    <b class="neg" data-i18n="dup_title"></b>
+    <div id="dupInfo" style="margin:6px 0"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="dupCancel()" style="background:var(--chip);color:var(--text)" data-i18n="dup_cancel"></button>
+      <button onclick="dupAllow()" style="background:var(--red)" data-i18n="dup_allow"></button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <button id="tabExpense" class="active" onclick="switchTab('expense')" data-i18n="tab_expense"></button>
+    <button id="tabIncome" class="inc" onclick="switchTab('income')" data-i18n="tab_income"></button>
+  </div>
+  <input type="number" id="amount" inputmode="decimal" data-i18n-ph="amount_ph">
+  <select id="category" onchange="onCatChange()"></select>
+  <input type="text" id="newCat" data-i18n-ph="newcat_ph" style="display:none">
+  <select id="merchantSel" onchange="onMerchantPick()"></select>
+  <input type="text" id="note" data-i18n-ph="note_ph">
+  <button id="delMerchantBtn" class="del" style="display:none;width:100%;margin:4px 0" onclick="deleteMerchant()" data-i18n="del_merchant"></button>
+  <div id="pendingBox"></div>
+  <button id="addBtn" onclick="addEntry()"></button>
+</div>
+
+<div class="card">
+  <h3 id="catTitle"></h3>
+  <div id="categorySummary"></div>
+</div>
+
+<div class="card">
+  <h3 data-i18n="month_entries"></h3>
+  <div id="expenseList"></div>
+</div>
+
+<div class="card" id="mortCard"><div id="mortBox"></div></div>
+
+<div class="card">
+  <h3 data-i18n="rec_title"></h3>
+  <div class="muted" style="font-size:14px;margin-bottom:6px" data-i18n="rec_desc"></div>
+  <div id="recList"></div>
+  <button id="recToggle" onclick="toggleRecForm()" data-i18n="rec_add_btn"></button>
+  <div id="recForm" style="display:none">
+    <input type="text" id="recName" data-i18n-ph="rec_name_ph" oninput="updateRecPreview()">
+    <select id="recCat" onchange="onRecCatChange()"></select>
+    <input type="text" id="recNewCat" data-i18n-ph="newcat_ph" style="display:none">
+    <input type="number" id="recAmount" inputmode="decimal" data-i18n-ph="rec_amount_ph" oninput="updateRecPreview()">
+    <input type="number" id="recN" inputmode="numeric" data-i18n-ph="rec_n_ph" oninput="updateRecPreview()">
+    <input type="number" id="recPaid" inputmode="numeric" data-i18n-ph="rec_paid_ph" oninput="updateRecPreview()">
+    <div class="muted" style="font-size:14px;margin-top:6px" data-i18n="rec_start_lbl"></div>
+    <input type="month" id="recStart" onchange="updateRecPreview()">
+    <input type="number" id="recDay" inputmode="numeric" min="1" max="31" data-i18n-ph="rec_day_ph" oninput="updateRecPreview()">
+    <input type="number" id="recCash" inputmode="decimal" data-i18n-ph="rec_cash_ph" oninput="updateRecPreview()">
+    <input type="number" id="recIncome" inputmode="decimal" data-i18n-ph="rec_income_ph" oninput="saveIncomeField();updateRecPreview()">
+    <div id="recPreview" style="margin:8px 0;padding:10px;border-radius:10px;background:var(--bg);line-height:1.6"></div>
+    <button onclick="saveRecurringForm()" data-i18n="rec_save"></button>
+    <button onclick="toggleRecForm()" style="background:var(--chip);color:var(--text)" data-i18n="viewer_close"></button>
+  </div>
+</div>
+
+<div class="card">
+  <h3 data-i18n="auto_title"></h3>
+  <div class="muted" style="font-size:14px;margin-bottom:6px" data-i18n="auto_desc"></div>
+  <div id="androidBox" style="display:none;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:10px">
+    <b data-i18n="and_title"></b>
+    <div id="androidStatus" style="margin:6px 0"></div>
+    <button onclick="AndroidBridge.openNotificationAccess()" data-i18n="and_btn"></button>
+    <button onclick="AndroidBridge.openBatterySettings()" style="background:var(--chip);color:var(--text)" data-i18n="and_battery"></button>
+    <div class="muted" style="font-size:13px;margin-top:6px" data-i18n="and_hint"></div>
+  </div>
+  <textarea id="notifTest" rows="3" data-i18n-ph="notif_ph"></textarea>
+  <button onclick="testNotif()" data-i18n="notif_btn"></button>
+  <details style="margin-top:8px"><summary class="muted" data-i18n="macro_sum"></summary>
+    <div class="muted" style="font-size:14px;margin-top:6px" data-i18n="macro_desc"></div>
+    <input type="text" id="autoLink" readonly onclick="this.select()" dir="ltr">
+  </details>
+</div>
+
+<div class="card">
+  <h3 data-i18n="backup_title"></h3>
+  <button onclick="downloadBackup()" data-i18n="backup_dl"></button>
+  <button onclick="showBackupText()" style="background:var(--chip);color:var(--text)" data-i18n="backup_text_btn"></button>
+  <textarea id="backupText" rows="4" data-i18n-ph="backup_ph"></textarea>
+  <button onclick="restoreFromBox()" data-i18n="restore_text"></button>
+  <input type="file" id="restoreFile" accept=".json,application/json" onchange="restoreFromFile()">
+  <div id="backupStatus" class="muted"></div>
+</div>
+</div>
+
+<div id="pagePay" style="display:none">
+<div class="card">
+  <h3 data-i18n="pay_title"></h3>
+  <div class="muted" style="font-size:14px;margin-bottom:8px" data-i18n="pay_desc"></div>
+  <input type="file" id="payCamera" accept="image/*" capture="environment" style="display:none" onchange="scanPayslip(this)">
+  <input type="file" id="payInput" accept="image/*" style="display:none" onchange="scanPayslip(this)">
+  <div style="display:flex;gap:8px">
+    <button onclick="document.getElementById('payCamera').click()" data-i18n="pay_camera"></button>
+    <button onclick="document.getElementById('payInput').click()" style="background:var(--chip);color:var(--text)" data-i18n="pay_gallery"></button>
+  </div>
+  <div id="payStatus" class="muted" style="margin:6px 0"></div>
+  <img id="payPreview" alt="" style="display:none;max-height:140px;border-radius:8px;margin-bottom:8px">
+  <input type="number" id="payNet" inputmode="decimal" data-i18n-ph="pay_net_ph">
+  <input type="number" id="payGross" inputmode="decimal" data-i18n-ph="pay_gross_ph">
+  <input type="text" id="payEmployer" data-i18n-ph="pay_employer_ph">
+  <div class="muted" style="font-size:14px" data-i18n="pay_slip_month"></div>
+  <input type="month" id="payM">
+  <div class="muted" style="font-size:14px" data-i18n="pay_month_lbl"></div>
+  <input type="month" id="payAddMonth">
+  <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="paySaveImg" checked style="width:auto;margin:0"><span data-i18n="pay_save_img"></span></label>
+  <details style="margin:6px 0"><summary class="muted" data-i18n="pay_raw"></summary><textarea id="payRaw" rows="5" readonly></textarea></details>
+  <button onclick="payAdd()" data-i18n="pay_add"></button>
+</div>
+<div class="card">
+  <h3 data-i18n="pay_hist"></h3>
+  <div id="payHist"></div>
+</div>
+</div>
+
+<div id="pageCal" style="display:none">
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <button class="del" id="calPrev" onclick="calMove(-1)" style="margin:0;font-size:18px">›</button>
+    <b id="calTitle" style="font-size:17px"></b>
+    <button class="del" id="calNext" onclick="calMove(1)" style="margin:0;font-size:18px">‹</button>
+  </div>
+  <div id="calGrid"></div>
+  <div class="sum"><span class="muted" data-i18n="cal_total"></span><b class="neg" id="calMonthTotal"></b></div>
+</div>
+<div class="card" id="calDetail"></div>
+</div>
+
+<div id="pageShare" style="display:none">
+<div class="card">
+  <h3 data-i18n="share_title"></h3>
+  <div class="muted" style="font-size:14px;margin-bottom:6px" data-i18n="share_desc"></div>
+  <div class="muted" style="font-size:14px" data-i18n="share_months_lbl"></div>
+  <select id="shareMonths" onchange="saveShareMonths();renderSharePreview()"></select>
+  <pre id="sharePreview" style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.6;background:#dcf8c6;color:#1f2937;border-radius:12px;padding:12px;margin:8px 0"></pre>
+  <button onclick="shareWhatsApp()" style="background:#16a34a" data-i18n="share_btn"></button>
+</div>
+</div>
+
+<nav id="bottomNav">
+  <button id="pgPay" onclick="showPage(0)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span data-i18n="pg_pay"></span></button>
+  <button id="pgMain" class="active" onclick="showPage(1)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg><span data-i18n="pg_main"></span></button>
+  <button id="pgCal" onclick="showPage(2)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span data-i18n="pg_cal"></span></button>
+  <button id="pgShare" onclick="showPage(3)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg><span data-i18n="share_title"></span></button>
+</nav>
+
+<div id="viewer" onclick="closeReceipt()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:16px">
+  <img id="viewerImg" alt="" style="max-width:100%;max-height:80%;border-radius:8px">
+  <button style="width:auto;padding:10px 28px" data-i18n="viewer_close"></button>
+</div>
+
+<script>
+var entries = [];
+var I18N = {"he": {"title": "מעקב הוצאות אישי", "nag_title": "לא גיבית את הנתונים לאחרונה.", "nag_btn": "הורדת גיבוי עכשיו", "prev_month": "חודש קודם", "next_month": "חודש הבא", "carry_lbl": "יתרה מחודשים קודמים:", "incomes_lbl": "הכנסות:", "expenses_lbl": "הוצאות:", "balance_lbl": "נשאר בחשבון:", "scan_camera": "📷 צילום קבלה", "scan_gallery": "🖼️ בחירה מהגלריה", "warm_btn": "הורדת הסריקה לעבודה בלי אינטרנט", "dup_title": "שים לב: נראה שהקבלה הזאת כבר נרשמה.", "dup_cancel": "ביטול, לא לרשום", "dup_allow": "לרשום בכל זאת", "tab_expense": "הוצאה", "tab_income": "הכנסה", "amount_ph": "סכום בשקלים (למשל 15000)", "newcat_ph": "שם הקטגוריה החדשה", "note_ph": "שם העסק או הערה (לא חובה)", "del_merchant": "מחיקת העסק הזה מהרשימה", "add_expense": "הוספת הוצאה", "add_income": "הוספת הכנסה", "cat_title_exp": "הוצאות לפי קטגוריה", "cat_title_inc": "הכנסות לפי קטגוריה", "month_entries": "תנועות החודש", "auto_title": "הוספה אוטומטית מהתראות", "auto_desc": "כאן אפשר לבדוק איך האפליקציה מבינה טקסט של התראת תשלום. הדבק טקסט כמו \"₪66.60 ב-City Market\" ולחץ על הבדיקה.", "notif_ph": "הדבק כאן טקסט של התראה", "notif_btn": "בדיקה והוספה", "macro_sum": "הקישור להגדרה ב-MacroDroid", "macro_desc": "הכתובת שצריך לפתוח בכל התראה:", "backup_title": "גיבוי ושחזור", "backup_dl": "הורדת גיבוי לקובץ", "backup_text_btn": "הצגת הגיבוי כטקסט להעתקה", "backup_ph": "כאן יופיע גיבוי להעתקה. כדי לשחזר, הדבק כאן גיבוי ולחץ על שחזור.", "restore_text": "שחזור מהטקסט", "viewer_close": "סגירה", "receipt_alt": "קבלה", "net_on": "מחובר לאינטרנט. האפליקציה עובדת גם בלי אינטרנט.", "net_off": "אין אינטרנט. האפליקציה ממשיכה לעבוד כרגיל.", "no_merchant": "בחירה מרשימת עסקים שמורים…", "new_cat_opt": "＋ קטגוריה חדשה…", "err_amount": "נא להכניס סכום תקין", "err_catname": "נא לכתוב שם לקטגוריה", "err_nospace": "אין מקום לשמור את תמונת הקבלה. התנועה נשמרה בלי תמונה.", "left_lbl": "נשאר:", "receipt_btn": "🧾 קבלה", "delete_btn": "מחיקה", "more_n": "▾ הצג עוד {n} תנועות", "more_one": "▾ הצג עוד תנועה אחת", "less_btn": "▴ הצג פחות", "no_entries": "אין תנועות בחודש הזה.", "no_entries_tab": "עדיין אין תנועות בלשונית הזאת.", "pending_note": "הקבלה תישמר עם התנועה", "pending_remove": "הסר", "dup_info": "{name}, {amt}, נרשמה ב-{date}.", "dup_allowed": "בסדר. אפשר ללחוץ \"הוספת הוצאה\" כדי לרשום שוב.", "dup_cancelled": "הסריקה בוטלה, לא נרשם דבר.", "scan_prepare": "מכין את התמונה…", "scan_reading": "קורא את הקבלה…", "scan_reading_first": "קורא את הקבלה. בפעם הראשונה זה מוריד רכיבים וצריך אינטרנט…", "scan_found": "זיהיתי {amt}. בדוק את הסכום והקטגוריה ולחץ \"הוספת הוצאה\".", "scan_no_amount": "לא זיהיתי סכום. מלא אותו ידנית, התמונה תישמר עם התנועה.", "scan_nolib": "רכיב הסריקה לא נטען. התחבר לאינטרנט פעם אחת ורענן את הדף. אפשר למלא ידנית.", "scan_fail": "לא הצלחתי לקרוא את הקבלה. אפשר למלא ידנית, התמונה תישמר עם התנועה.", "warm_need_net": "צריך חיבור לאינטרנט כדי להוריד את הרכיבים. התחבר ורענן את הדף.", "warm_downloading": "מוריד רכיבי סריקה… זה עשוי לקחת דקה.", "warm_done": "הסריקה מוכנה לעבודה גם בלי אינטרנט.", "warm_fail": "ההורדה נכשלה. בדוק את החיבור ונסה שוב.", "bk_done": "הגיבוי הורד, כולל תמונות הקבלות. אם לא ירד קובץ, השתמש בהצגה כטקסט.", "bk_fail": "ההורדה לא עבדה כאן. השתמש בהצגה כטקסט להעתקה.", "bk_text": "העתק את הטקסט (בלי תמונות הקבלות) והדבק אותו בשדה השחזור באפליקציה החדשה.", "bk_invalid": "הגיבוי לא תקין.", "bk_restored": "שוחזרו {n} תנועות.", "img_missing": "התמונה לא נמצאה בדפדפן הזה.", "q_seen": "ההתראה כבר נקלטה לפני רגע. לא נוספה כפילות.", "q_foreign": "החיוב במטבע זר. כתוב את הסכום בשקלים בשדה הסכום ולחץ \"הוספת הוצאה\".", "q_noamount": "לא הצלחתי למצוא סכום בהתראה. מלא אותו ידנית.", "q_added_exp": "נוספה הוצאה של {amt}{m}, קטגוריה: {cat}.", "q_added_inc": "נוספה הכנסה של {amt}{m}, קטגוריה: {cat}.", "q_undo": "ביטול", "q_undone": "הביטול בוצע.", "rec_title": "הוצאות קבועות ותשלומים", "rec_desc": "טלפון בתשלומים, חבילת סלולר, מנוי: האפליקציה תרשום אותם לבד בתחילת כל חודש.", "rec_add_btn": "＋ הוספת הוצאה קבועה או תשלומים", "rec_name_ph": "מה קנית? (למשל: טלפון)", "rec_amount_ph": "סכום חודשי בשקלים (למשל 300)", "rec_n_ph": "מספר תשלומים (ריק = ללא הגבלה)", "rec_paid_ph": "כמה תשלומים כבר שולמו (אם יש)", "rec_start_lbl": "חודש התשלום הראשון:", "rec_cash_ph": "מחיר במזומן, בתשלום אחד (לא חובה)", "rec_income_ph": "הכנסה חודשית לבדיקת התאמה", "rec_save": "שמירה והתחלת חיוב", "rec_total_month": "סה״כ התחייבויות קבועות בחודש:", "rec_progress": "תשלום {p} מתוך {n}", "rec_ongoing": "ללא הגבלה", "rec_left_total": "נשאר לשלם: {amt}", "rec_ends": "סיום ב-{month}", "rec_finished": "הסתיים", "rec_not_started": "מתחיל ב-{month}", "rec_stop": "הפסקה ומחיקה", "rec_stop_confirm": "להפסיק את התשלום הקבוע \"{name}\"? תנועות שכבר נרשמו יישארו.", "rec_err_name": "נא לכתוב מה קנית", "rec_err_amount": "נא להכניס סכום חודשי תקין", "rec_err_paid": "מספר התשלומים ששולמו חייב להיות קטן ממספר התשלומים הכולל.", "rec_saved": "נשמר. {name}: {amt} בכל חודש.", "pv_hint": "הכנס סכום חודשי כדי לראות את החישוב.", "pv_monthly": "יורד בכל חודש: {amt}", "pv_count": "מספר תשלומים: {n}", "pv_paid_left": "כבר שולמו {p}, נשארו {r}", "pv_total": "סה״כ לתשלום בסוף: {amt}", "pv_left": "נשאר לשלם מעכשיו: {amt}", "pv_last": "התשלום האחרון: {month}", "pv_year": "ללא סיום: {amt} בשנה", "pv_cash_more": "מחיר במזומן {cash}. בתשלומים תשלם יותר ב-{diff} ({pct}%).", "pv_cash_same": "מחיר במזומן {cash}. אין תוספת בתשלומים.", "pv_check_title": "האם אפשר לעמוד בזה?", "pv_no_income": "הכנס הכנסה חודשית כדי לבדוק אם ההוצאה מתאימה לך.", "pv_breakdown": "הכנסה {inc}, הוצאות רגילות בממוצע {exp}, הוצאות קבועות קיימות {fix}, ההוצאה החדשה {new}. נשאר בכל חודש: {left}.", "pv_ok": "✅ נוח: ההתחייבויות הקבועות יהיו {pct}% מההכנסה.", "pv_warn": "⚠️ אפשרי, אבל צפוף: ההתחייבויות הקבועות יהיו {pct}% מההכנסה.", "pv_bad": "⛔ כבד מדי: ההתחייבויות הקבועות יהיו {pct}% מההכנסה.", "pv_neg": "⛔ לא מומלץ: לפי הממוצע שלך החשבון יהיה במינוס של {amt} בכל חודש.", "pv_disclaimer": "הערכה גסה לפי הנתונים שלך, לא ייעוץ פיננסי.", "pv_no_history": "אין עדיין נתוני הוצאות קודמים, ולכן ההוצאות הרגילות לא נכללו בחישוב.", "rec_day_ph": "יום בחודש שבו התשלום יורד (1-31)", "pv_day": "יורד ב-{d} לכל חודש", "rec_on_day": "יורד ב-{d} בחודש", "rec_first_on": "התשלום הראשון ב-{date}", "cat_del_confirm": "למחוק את הקטגוריה \"{name}\"? תנועות קיימות יישארו עם הקטגוריה הזאת.", "cat_del_aria": "מחיקת הקטגוריה", "mort_title": "משכנתא", "mort_hint": "לחץ כדי להגדיר את המשכנתא שלך", "mort_name": "משכנתא", "mort_form_desc": "הוסף מסלול אחד או יותר, כפי שהם כתובים באישור המשכנתא.", "mort_edit": "עריכה", "mort_per_month": "יורדים כל {d} בחודש", "mort_left": "נשאר לשלם {amt} · שולם {p}%", "mort_interest": "מתוכו ריבית", "mort_principal": "מתוכו קרן", "mort_progress": "תשלומים", "mort_progress_v": "{m} מתוך {n}", "mort_total_int": "ריבית כוללת עד הסוף", "mort_end": "סיום צפוי", "mort_track_n": "מסלול {n}", "mort_remove": "הסרה", "mort_amount_ph": "סכום המסלול בשקלים", "mort_rate_ph": "ריבית שנתית באחוזים (למשל 4.5)", "mort_years_ph": "מספר שנים", "mort_add_track": "+ הוספת מסלול", "mort_start_lbl": "מתי התחילה המשכנתא?", "mort_day_ph": "באיזה יום בחודש יורד התשלום", "mort_save": "שמירה", "mort_delete": "מחיקת המשכנתא", "mort_del_confirm": "למחוק את המשכנתא מהאפליקציה? תנועות שכבר נרשמו יישארו.", "mort_err_track": "נא למלא נכון את מסלול {n}: סכום, ריבית (0-30) ושנים (1-40).", "mort_err_start": "נא לבחור מתי התחילה המשכנתא.", "mort_err_day": "נא לכתוב יום בחודש בין 1 ל-31.", "mort_track_info": "ריבית {r}% · {y} שנים · {p} לחודש", "mort_whatif": "מה אם אשלם עוד כל חודש?", "mort_extra_ph": "תשלום נוסף בשקלים", "mort_whatif_res": "חוסכים כ-{amt} ריבית ומסיימים {m} חודשים מוקדם יותר ({end})", "mort_note": "החישוב מניח ריבית קבועה (לוח שפיצר). בפריים ובמסלולים צמודים התשלום האמיתי ישתנה. אפשר לעדכן את הריבית בעריכה.", "mort_toggle": "הצגה או הסתרה", "mt_p": "פריים", "mt_fu": "קבועה לא צמודה", "mt_fl": "קבועה צמודה", "mt_v": "משתנה", "mt_o": "אחר", "house_title": "דיור", "house_hint": "משכנתא או שכירות", "house_mort": "משכנתא", "house_rent": "שכירות", "house_sum_mort": "{amt} לחודש", "house_sum_rent": "{amt} לחודש · נשארו {n} חודשים", "house_replace": "כבר מוגדרת משכנתא. להחליף אותה בשכירות?", "rent_name": "שכירות", "rent_amount_ph": "שכר דירה חודשי בשקלים", "rent_months_ph": "לכמה חודשים החוזה", "rent_more": "פרטים נוספים (לא חובה)", "rent_start_lbl": "מתי התחיל החוזה?", "rent_day_ph": "באיזה יום בחודש יורד התשלום (ברירת מחדל 1)", "rent_total": "סה\"כ לתקופה", "rent_left_pay": "נשאר לשלם", "rent_months_left": "חודשים שנשארו", "rent_progress": "חודש {m} מתוך {n}", "rent_finished": "החוזה הסתיים", "rent_err_amount": "נא לכתוב סכום שכירות תקין.", "rent_err_months": "נא לכתוב מספר חודשים בין 1 ל-360.", "rent_delete": "מחיקת השכירות", "rent_del_confirm": "למחוק את השכירות מהאפליקציה? תנועות שכבר נרשמו יישארו.", "house_replace_r": "כבר מוגדרת שכירות. להחליף אותה במשכנתא?", "pg_main": "ראשי", "pg_pay": "תלוש משכורת", "pay_title": "תלוש משכורת", "pay_desc": "צלם או בחר תמונה של תלוש המשכורת. האפליקציה תנסה לקרוא את השכר נטו והברוטו. תמיד בדוק את המספרים לפני ההוספה.", "pay_camera": "📷 צילום תלוש", "pay_gallery": "🖼️ בחירה מהגלריה", "pay_net_ph": "שכר נטו (מה שנכנס לחשבון)", "pay_gross_ph": "שכר ברוטו (לא חובה)", "pay_employer_ph": "שם המעסיק (לא חובה)", "pay_month_lbl": "להוסיף להכנסות של חודש:", "pay_save_img": "שמירת תמונת התלוש", "pay_found": "זוהה נטו {net}{gross}. בדוק שהמספרים נכונים.", "pay_found_gross": " · ברוטו {g}", "pay_none": "לא הצלחתי לזהות את השכר. הקלד אותו ידנית, או נסה לצלם שוב ישר ובאור טוב.", "pay_raw": "הטקסט שנקרא מהתלוש", "pay_add": "הוספה להכנסות", "pay_added": "נוספה הכנסה של {amt}.", "pay_dup": "תלוש עם אותו סכום כבר נוסף ({m}). להוסיף בכל זאת?", "pay_err": "נא לכתוב שכר נטו תקין.", "pay_hist": "תלושים שנוספו", "pay_hist_empty": "עדיין לא נוספו תלושים.", "pay_note": "תלוש משכורת", "pay_gross_lbl": "ברוטו {g}", "pay_view": "תלוש", "pay_del_confirm": "למחוק את התלוש ואת ההכנסה שנרשמה ממנו?", "pay_slip_month": "חודש התלוש (אם זוהה):", "pg_cal": "לוח שנה", "cal_total": "סה\"כ הוצאות בחודש", "cal_day_total": "הוצאות ביום הזה", "cal_none": "לא היו הוצאות ביום הזה.", "cal_income": "הכנסות ביום הזה", "cal_prev": "חודש קודם", "cal_next": "חודש הבא", "share_title": "שיתוף", "share_desc": "שליחת סיכום בוואטסאפ למי שתבחר.", "share_months_lbl": "כמה חודשים לשלוח", "share_n1": "החודש הנוכחי", "share_nn": "{n} חודשים אחרונים", "share_btn": "📤 שלח נתונים בוואטסאפ", "share_empty": "אין נתונים לשליחה בתקופה הזאת.", "msg_title": "📊 סיכום {month}", "msg_inc": "הכנסות: {amt}", "msg_exp": "הוצאות: {amt}", "msg_bal": "נשאר בחשבון: {amt}", "msg_cats": "לפי קטגוריה:", "msg_more": "ועוד {n} קטגוריות", "msg_foot": "נשלח מאפליקציית מעקב ההוצאות", "scan_no_name": "לא זוהה שם עסק. הקלד אותו או בחר מהרשימה.", "and_title": "קריאת התראות באפליקציית אנדרואיד", "and_on": "✔ קריאת ההתראות פעילה", "and_off": "✖ קריאת ההתראות כבויה. לחץ על הכפתור ואשר גישה להתראות לאפליקציה.", "and_btn": "הפעלת גישה להתראות", "and_battery": "מניעת עצירה ברקע (סוללה)", "and_hint": "התראות תשלום (Wallet, בנק, אליאקספרס) נרשמות כהוצאה. אם האפליקציה סגורה, הן ייכנסו ברגע שתפתח אותה.", "bk_done_android": "הגיבוי נשמר בתיקיית ההורדות (Downloads) בטלפון."}, "en": {"title": "Personal Expense Tracker", "nag_title": "You haven't backed up your data recently.", "nag_btn": "Download backup now", "prev_month": "Previous month", "next_month": "Next month", "carry_lbl": "Carried over from earlier months:", "incomes_lbl": "Income:", "expenses_lbl": "Expenses:", "balance_lbl": "Left in account:", "scan_camera": "📷 Photograph receipt", "scan_gallery": "🖼️ Choose from gallery", "warm_btn": "Download scanner for offline use", "dup_title": "Heads up: this receipt seems to be recorded already.", "dup_cancel": "Cancel, don't record", "dup_allow": "Record anyway", "tab_expense": "Expense", "tab_income": "Income", "amount_ph": "Amount in ₪ (e.g. 15000)", "newcat_ph": "New category name", "note_ph": "Business name or note (optional)", "del_merchant": "Remove this business from the list", "add_expense": "Add expense", "add_income": "Add income", "cat_title_exp": "Expenses by category", "cat_title_inc": "Income by category", "month_entries": "This month's transactions", "auto_title": "Automatic entry from notifications", "auto_desc": "Test how the app reads a payment notification. Paste text like \"₪66.60 at City Market\" and press the button.", "notif_ph": "Paste notification text here", "notif_btn": "Test and add", "macro_sum": "Link for MacroDroid setup", "macro_desc": "The address to open on each notification:", "backup_title": "Backup and restore", "backup_dl": "Download backup file", "backup_text_btn": "Show backup as text to copy", "backup_ph": "A backup to copy will appear here. To restore, paste a backup here and press restore.", "restore_text": "Restore from text", "viewer_close": "Close", "receipt_alt": "Receipt", "net_on": "Online. The app also works without internet.", "net_off": "No internet. The app keeps working as usual.", "no_merchant": "Pick a saved business…", "new_cat_opt": "＋ New category…", "err_amount": "Please enter a valid amount", "err_catname": "Please enter a category name", "err_nospace": "No room to save the receipt photo. The transaction was saved without it.", "left_lbl": "Left:", "receipt_btn": "🧾 Receipt", "delete_btn": "Delete", "more_n": "▾ Show {n} more", "more_one": "▾ Show 1 more", "less_btn": "▴ Show less", "no_entries": "No transactions this month.", "no_entries_tab": "No transactions in this tab yet.", "pending_note": "The receipt will be saved with the transaction", "pending_remove": "Remove", "dup_info": "{name}, {amt}, recorded on {date}.", "dup_allowed": "OK. You can press \"Add expense\" to record it again.", "dup_cancelled": "Scan cancelled, nothing was recorded.", "scan_prepare": "Preparing the photo…", "scan_reading": "Reading the receipt…", "scan_reading_first": "Reading the receipt. The first time it downloads components and needs internet…", "scan_found": "Found {amt}. Check the amount and category, then press \"Add expense\".", "scan_no_amount": "No amount found. Enter it manually; the photo will be saved with the transaction.", "scan_nolib": "The scanner did not load. Connect to the internet once and reload the page. You can enter it manually.", "scan_fail": "Could not read the receipt. You can enter it manually; the photo will be saved with the transaction.", "warm_need_net": "Internet is needed to download the components. Connect and reload the page.", "warm_downloading": "Downloading scanner components… this may take a minute.", "warm_done": "The scanner is ready to work offline too.", "warm_fail": "Download failed. Check your connection and try again.", "bk_done": "Backup downloaded, including receipt photos. If no file appeared, use the text view.", "bk_fail": "Download did not work here. Use the text view to copy.", "bk_text": "Copy the text (without receipt photos) and paste it into the restore field in the new app.", "bk_invalid": "The backup is not valid.", "bk_restored": "Restored {n} transactions.", "img_missing": "The photo was not found in this browser.", "q_seen": "This notification was just captured. No duplicate added.", "q_foreign": "Charged in a foreign currency. Enter the amount in ₪ and press \"Add expense\".", "q_noamount": "No amount found in the notification. Enter it manually.", "q_added_exp": "Expense of {amt}{m} added, category: {cat}.", "q_added_inc": "Income of {amt}{m} added, category: {cat}.", "q_undo": "Undo", "q_undone": "Undone.", "rec_title": "Recurring expenses & installments", "rec_desc": "Phone installments, mobile plan, subscriptions: the app records them automatically at the start of each month.", "rec_add_btn": "＋ Add recurring expense or installments", "rec_name_ph": "What is it? (e.g. Phone)", "rec_amount_ph": "Monthly amount in ₪ (e.g. 300)", "rec_n_ph": "Number of payments (empty = no end)", "rec_paid_ph": "Payments already made (if any)", "rec_start_lbl": "Month of the first payment:", "rec_cash_ph": "Price if paid at once (optional)", "rec_income_ph": "Monthly income, for the affordability check", "rec_save": "Save and start charging", "rec_total_month": "Total fixed commitments per month:", "rec_progress": "Payment {p} of {n}", "rec_ongoing": "No end date", "rec_left_total": "Left to pay: {amt}", "rec_ends": "Ends in {month}", "rec_finished": "Finished", "rec_not_started": "Starts in {month}", "rec_stop": "Stop and remove", "rec_stop_confirm": "Stop the recurring payment \"{name}\"? Entries already recorded will stay.", "rec_err_name": "Please enter what it is", "rec_err_amount": "Please enter a valid monthly amount", "rec_err_paid": "Payments already made must be fewer than the total number of payments.", "rec_saved": "Saved. {name}: {amt} every month.", "pv_hint": "Enter a monthly amount to see the calculation.", "pv_monthly": "Charged every month: {amt}", "pv_count": "Number of payments: {n}", "pv_paid_left": "Already paid {p}, {r} left", "pv_total": "Total you will pay: {amt}", "pv_left": "Still to pay from now: {amt}", "pv_last": "Last payment: {month}", "pv_year": "No end date: {amt} per year", "pv_cash_more": "Cash price {cash}. Paying in installments costs {diff} more ({pct}%).", "pv_cash_same": "Cash price {cash}. No extra cost for installments.", "pv_check_title": "Can you afford it?", "pv_no_income": "Enter your monthly income to check whether this fits.", "pv_breakdown": "Income {inc}, average regular spending {exp}, existing fixed {fix}, this new one {new}. Left each month: {left}.", "pv_ok": "✅ Comfortable: fixed commitments will be {pct}% of income.", "pv_warn": "⚠️ Possible but tight: fixed commitments will be {pct}% of income.", "pv_bad": "⛔ Too heavy: fixed commitments will be {pct}% of income.", "pv_neg": "⛔ Not recommended: based on your averages the account would be short by {amt} every month.", "pv_disclaimer": "A rough estimate from your data, not financial advice.", "pv_no_history": "No earlier spending data yet, so regular spending is not included.", "rec_day_ph": "Day of the month it is charged (1-31)", "pv_day": "Charged on day {d} of each month", "rec_on_day": "Charged on day {d}", "rec_first_on": "First payment on {date}", "cat_del_confirm": "Delete the category \"{name}\"? Existing transactions keep this category.", "cat_del_aria": "Delete category", "mort_title": "Mortgage", "mort_hint": "Tap to set up your mortgage", "mort_name": "Mortgage", "mort_form_desc": "Add one or more tracks, as written in your mortgage approval.", "mort_edit": "Edit", "mort_per_month": "charged on the {d}th of each month", "mort_left": "{amt} left to pay · {p}% paid", "mort_interest": "of which interest", "mort_principal": "of which principal", "mort_progress": "Payments", "mort_progress_v": "{m} of {n}", "mort_total_int": "Total interest to the end", "mort_end": "Expected end", "mort_track_n": "Track {n}", "mort_remove": "Remove", "mort_amount_ph": "Track amount in shekels", "mort_rate_ph": "Annual interest in % (e.g. 4.5)", "mort_years_ph": "Number of years", "mort_add_track": "+ Add track", "mort_start_lbl": "When did the mortgage start?", "mort_day_ph": "Day of month the payment is charged", "mort_save": "Save", "mort_delete": "Delete mortgage", "mort_del_confirm": "Delete the mortgage from the app? Payments already recorded will stay.", "mort_err_track": "Please fill track {n} correctly: amount, interest (0-30) and years (1-40).", "mort_err_start": "Please choose when the mortgage started.", "mort_err_day": "Please enter a day of the month from 1 to 31.", "mort_track_info": "{r}% interest · {y} years · {p} per month", "mort_whatif": "What if I pay extra every month?", "mort_extra_ph": "Extra payment in shekels", "mort_whatif_res": "You save about {amt} in interest and finish {m} months earlier ({end})", "mort_note": "Calculated with a fixed rate (Spitzer schedule). With prime or indexed tracks the real payment will change. You can update the rate by editing.", "mort_toggle": "Show or hide", "mt_p": "Prime", "mt_fu": "Fixed, non-indexed", "mt_fl": "Fixed, indexed", "mt_v": "Variable", "mt_o": "Other", "house_title": "Housing", "house_hint": "Mortgage or rent", "house_mort": "Mortgage", "house_rent": "Rent", "house_sum_mort": "{amt} per month", "house_sum_rent": "{amt} per month · {n} months left", "house_replace": "A mortgage is already set up. Replace it with rent?", "rent_name": "Rent", "rent_amount_ph": "Monthly rent in shekels", "rent_months_ph": "Lease length in months", "rent_more": "More details (optional)", "rent_start_lbl": "When did the lease start?", "rent_day_ph": "Day of month the payment is charged (default 1)", "rent_total": "Total for the period", "rent_left_pay": "Left to pay", "rent_months_left": "Months left", "rent_progress": "Month {m} of {n}", "rent_finished": "The lease has ended", "rent_err_amount": "Please enter a valid rent amount.", "rent_err_months": "Please enter a number of months from 1 to 360.", "rent_delete": "Delete rent", "rent_del_confirm": "Delete the rent from the app? Payments already recorded will stay.", "house_replace_r": "Rent is already set up. Replace it with a mortgage?", "pg_main": "Main", "pg_pay": "Payslip", "pay_title": "Payslip", "pay_desc": "Take or choose a photo of your payslip. The app will try to read net and gross pay. Always check the numbers before adding.", "pay_camera": "📷 Take photo", "pay_gallery": "🖼️ Choose from gallery", "pay_net_ph": "Net pay (what reaches your account)", "pay_gross_ph": "Gross pay (optional)", "pay_employer_ph": "Employer name (optional)", "pay_month_lbl": "Add to income of month:", "pay_save_img": "Keep the payslip image", "pay_found": "Found net {net}{gross}. Check the numbers are right.", "pay_found_gross": " · gross {g}", "pay_none": "Could not read the pay. Type it in, or retake the photo straight and in good light.", "pay_raw": "Text read from the payslip", "pay_add": "Add to income", "pay_added": "Income of {amt} added.", "pay_dup": "A payslip with the same amount was already added ({m}). Add anyway?", "pay_err": "Please enter a valid net pay.", "pay_hist": "Added payslips", "pay_hist_empty": "No payslips added yet.", "pay_note": "Payslip", "pay_gross_lbl": "Gross {g}", "pay_view": "Payslip", "pay_del_confirm": "Delete this payslip and the income recorded from it?", "pay_slip_month": "Payslip month (if detected):", "pg_cal": "Calendar", "cal_total": "Total spent this month", "cal_day_total": "Spent on this day", "cal_none": "No expenses on this day.", "cal_income": "Income on this day", "cal_prev": "Previous month", "cal_next": "Next month", "share_title": "Share", "share_desc": "Send a summary on WhatsApp to anyone you choose.", "share_months_lbl": "How many months to send", "share_n1": "Current month", "share_nn": "Last {n} months", "share_btn": "📤 Send data on WhatsApp", "share_empty": "No data to send for this period.", "msg_title": "📊 Summary {month}", "msg_inc": "Income: {amt}", "msg_exp": "Expenses: {amt}", "msg_bal": "Left in account: {amt}", "msg_cats": "By category:", "msg_more": "and {n} more categories", "msg_foot": "Sent from my expense tracker app", "scan_no_name": "Business name not found. Type it or pick from the list.", "and_title": "Notification reading (Android app)", "and_on": "✔ Notification reading is on", "and_off": "✖ Notification reading is off. Tap the button and allow notification access for this app.", "and_btn": "Enable notification access", "and_battery": "Prevent background stop (battery)", "and_hint": "Payment notifications (Wallet, bank, AliExpress) are recorded as expenses. If the app is closed, they are added when you open it.", "bk_done_android": "The backup was saved to the Downloads folder on your phone."}, "ru": {"title": "Личный учёт расходов", "nag_title": "Вы давно не делали резервную копию.", "nag_btn": "Скачать копию сейчас", "prev_month": "Прошлый месяц", "next_month": "Следующий месяц", "carry_lbl": "Остаток с прошлых месяцев:", "incomes_lbl": "Доходы:", "expenses_lbl": "Расходы:", "balance_lbl": "Осталось на счёте:", "scan_camera": "📷 Снять чек", "scan_gallery": "🖼️ Выбрать из галереи", "warm_btn": "Скачать сканер для работы без интернета", "dup_title": "Внимание: похоже, этот чек уже записан.", "dup_cancel": "Отмена, не записывать", "dup_allow": "Всё равно записать", "tab_expense": "Расход", "tab_income": "Доход", "amount_ph": "Сумма в шекелях (например, 15000)", "newcat_ph": "Название новой категории", "note_ph": "Название заведения или заметка (необязательно)", "del_merchant": "Удалить это заведение из списка", "add_expense": "Добавить расход", "add_income": "Добавить доход", "cat_title_exp": "Расходы по категориям", "cat_title_inc": "Доходы по категориям", "month_entries": "Операции за месяц", "auto_title": "Автозапись из уведомлений", "auto_desc": "Проверьте, как приложение понимает уведомление об оплате. Вставьте текст вроде «₪66.60 в City Market» и нажмите кнопку.", "notif_ph": "Вставьте сюда текст уведомления", "notif_btn": "Проверить и добавить", "macro_sum": "Ссылка для настройки MacroDroid", "macro_desc": "Адрес, который нужно открывать при каждом уведомлении:", "backup_title": "Резервная копия и восстановление", "backup_dl": "Скачать копию в файл", "backup_text_btn": "Показать копию как текст для копирования", "backup_ph": "Здесь появится копия для копирования. Чтобы восстановить, вставьте копию сюда и нажмите «Восстановить из текста».", "restore_text": "Восстановить из текста", "viewer_close": "Закрыть", "receipt_alt": "Чек", "net_on": "Есть интернет. Приложение работает и без него.", "net_off": "Нет интернета. Приложение работает как обычно.", "no_merchant": "Выбрать из сохранённых заведений…", "new_cat_opt": "＋ Новая категория…", "err_amount": "Введите корректную сумму", "err_catname": "Введите название категории", "err_nospace": "Нет места для фото чека. Операция сохранена без фото.", "left_lbl": "Осталось:", "receipt_btn": "🧾 Чек", "delete_btn": "Удалить", "more_n": "▾ Показать ещё {n}", "more_one": "▾ Показать ещё 1", "less_btn": "▴ Показать меньше", "no_entries": "В этом месяце операций нет.", "no_entries_tab": "В этой вкладке пока нет операций.", "pending_note": "Чек сохранится вместе с операцией", "pending_remove": "Убрать", "dup_info": "{name}, {amt}, записан {date}.", "dup_allowed": "Хорошо. Нажмите «Добавить расход», чтобы записать ещё раз.", "dup_cancelled": "Сканирование отменено, ничего не записано.", "scan_prepare": "Подготовка фото…", "scan_reading": "Чтение чека…", "scan_reading_first": "Чтение чека. В первый раз загружаются компоненты, нужен интернет…", "scan_found": "Найдено: {amt}. Проверьте сумму и категорию и нажмите «Добавить расход».", "scan_no_amount": "Сумма не найдена. Введите её вручную, фото сохранится с операцией.", "scan_nolib": "Сканер не загрузился. Подключитесь к интернету один раз и обновите страницу. Можно ввести вручную.", "scan_fail": "Не удалось прочитать чек. Можно ввести вручную, фото сохранится с операцией.", "warm_need_net": "Для загрузки компонентов нужен интернет. Подключитесь и обновите страницу.", "warm_downloading": "Загрузка компонентов сканера… это может занять минуту.", "warm_done": "Сканер готов к работе и без интернета.", "warm_fail": "Не удалось загрузить. Проверьте подключение и повторите.", "bk_done": "Копия скачана вместе с фото чеков. Если файл не появился, используйте показ текстом.", "bk_fail": "Скачивание здесь не сработало. Используйте показ текстом.", "bk_text": "Скопируйте текст (без фото чеков) и вставьте в поле восстановления в новом приложении.", "bk_invalid": "Резервная копия недействительна.", "bk_restored": "Восстановлено операций: {n}.", "img_missing": "Фото не найдено в этом браузере.", "q_seen": "Это уведомление уже обработано. Дубликат не добавлен.", "q_foreign": "Списание в иностранной валюте. Введите сумму в шекелях и нажмите «Добавить расход».", "q_noamount": "В уведомлении не найдена сумма. Введите вручную.", "q_added_exp": "Добавлен расход {amt}{m}, категория: {cat}.", "q_added_inc": "Добавлен доход {amt}{m}, категория: {cat}.", "q_undo": "Отменить", "q_undone": "Отменено.", "rec_title": "Регулярные расходы и рассрочки", "rec_desc": "Телефон в рассрочку, тариф, подписки: приложение само записывает их в начале каждого месяца.", "rec_add_btn": "＋ Добавить регулярный расход или рассрочку", "rec_name_ph": "Что это? (например, телефон)", "rec_amount_ph": "Сумма в месяц в шекелях (например, 300)", "rec_n_ph": "Число платежей (пусто = без конца)", "rec_paid_ph": "Сколько платежей уже внесено (если есть)", "rec_start_lbl": "Месяц первого платежа:", "rec_cash_ph": "Цена при оплате сразу (необязательно)", "rec_income_ph": "Доход в месяц для проверки", "rec_save": "Сохранить и начать списания", "rec_total_month": "Всего фиксированных обязательств в месяц:", "rec_progress": "Платёж {p} из {n}", "rec_ongoing": "Без срока", "rec_left_total": "Осталось выплатить: {amt}", "rec_ends": "Окончание: {month}", "rec_finished": "Завершено", "rec_not_started": "Начало: {month}", "rec_stop": "Остановить и удалить", "rec_stop_confirm": "Остановить регулярный платёж «{name}»? Уже записанные операции останутся.", "rec_err_name": "Введите, что это", "rec_err_amount": "Введите корректную сумму в месяц", "rec_err_paid": "Число внесённых платежей должно быть меньше общего числа платежей.", "rec_saved": "Сохранено. {name}: {amt} каждый месяц.", "pv_hint": "Введите сумму в месяц, чтобы увидеть расчёт.", "pv_monthly": "Списывается каждый месяц: {amt}", "pv_count": "Число платежей: {n}", "pv_paid_left": "Уже внесено {p}, осталось {r}", "pv_total": "Итого вы заплатите: {amt}", "pv_left": "Осталось заплатить с этого момента: {amt}", "pv_last": "Последний платёж: {month}", "pv_year": "Без срока: {amt} в год", "pv_cash_more": "Цена сразу: {cash}. В рассрочку вы переплатите {diff} ({pct}%).", "pv_cash_same": "Цена сразу: {cash}. Рассрочка без переплаты.", "pv_check_title": "Потянете ли вы это?", "pv_no_income": "Введите месячный доход, чтобы проверить, подходит ли это.", "pv_breakdown": "Доход {inc}, средние обычные расходы {exp}, текущие фиксированные {fix}, новый платёж {new}. Остаётся в месяц: {left}.", "pv_ok": "✅ Комфортно: фиксированные обязательства составят {pct}% дохода.", "pv_warn": "⚠️ Возможно, но впритык: фиксированные обязательства составят {pct}% дохода.", "pv_bad": "⛔ Слишком тяжело: фиксированные обязательства составят {pct}% дохода.", "pv_neg": "⛔ Не рекомендуется: по вашим средним показателям на счёте будет нехватка {amt} каждый месяц.", "pv_disclaimer": "Приблизительная оценка по вашим данным, не финансовая консультация.", "pv_no_history": "Данных о прошлых расходах пока нет, поэтому обычные расходы не учтены.", "rec_day_ph": "День месяца, когда списывается платёж (1–31)", "pv_day": "Списывается {d}-го числа каждого месяца", "rec_on_day": "Списывается {d}-го числа", "rec_first_on": "Первый платёж: {date}", "cat_del_confirm": "Удалить категорию «{name}»? Существующие операции сохранят эту категорию.", "cat_del_aria": "Удалить категорию", "mort_title": "Ипотека", "mort_hint": "Нажмите, чтобы настроить ипотеку", "mort_name": "Ипотека", "mort_form_desc": "Добавьте один или несколько траков, как указано в одобрении ипотеки.", "mort_edit": "Изменить", "mort_per_month": "списывается {d}-го числа каждого месяца", "mort_left": "осталось {amt} · выплачено {p}%", "mort_interest": "из них проценты", "mort_principal": "из них основной долг", "mort_progress": "Платежи", "mort_progress_v": "{m} из {n}", "mort_total_int": "Всего процентов до конца", "mort_end": "Ожидаемое окончание", "mort_track_n": "Трек {n}", "mort_remove": "Убрать", "mort_amount_ph": "Сумма трека в шекелях", "mort_rate_ph": "Годовая ставка в % (например 4.5)", "mort_years_ph": "Количество лет", "mort_add_track": "+ Добавить трек", "mort_start_lbl": "Когда началась ипотека?", "mort_day_ph": "День месяца списания платежа", "mort_save": "Сохранить", "mort_delete": "Удалить ипотеку", "mort_del_confirm": "Удалить ипотеку из приложения? Уже записанные платежи останутся.", "mort_err_track": "Заполните трек {n} правильно: сумма, ставка (0-30) и годы (1-40).", "mort_err_start": "Выберите, когда началась ипотека.", "mort_err_day": "Введите день месяца от 1 до 31.", "mort_track_info": "ставка {r}% · {y} лет · {p} в месяц", "mort_whatif": "Что если платить больше каждый месяц?", "mort_extra_ph": "Доплата в шекелях", "mort_whatif_res": "Вы сэкономите около {amt} на процентах и закончите на {m} мес. раньше ({end})", "mort_note": "Расчёт при фиксированной ставке (аннуитет). При прайме и индексируемых траках реальный платёж изменится. Ставку можно обновить при изменении.", "mort_toggle": "Показать или скрыть", "mt_p": "Прайм", "mt_fu": "Фиксированная, без индексации", "mt_fl": "Фиксированная, с индексацией", "mt_v": "Переменная", "mt_o": "Другое", "house_title": "Жильё", "house_hint": "Ипотека или аренда", "house_mort": "Ипотека", "house_rent": "Аренда", "house_sum_mort": "{amt} в месяц", "house_sum_rent": "{amt} в месяц · осталось {n} мес.", "house_replace": "Ипотека уже настроена. Заменить её арендой?", "rent_name": "Аренда", "rent_amount_ph": "Аренда в месяц в шекелях", "rent_months_ph": "Срок договора в месяцах", "rent_more": "Дополнительно (необязательно)", "rent_start_lbl": "Когда начался договор?", "rent_day_ph": "День месяца списания (по умолчанию 1)", "rent_total": "Всего за период", "rent_left_pay": "Осталось заплатить", "rent_months_left": "Осталось месяцев", "rent_progress": "Месяц {m} из {n}", "rent_finished": "Договор закончился", "rent_err_amount": "Введите корректную сумму аренды.", "rent_err_months": "Введите число месяцев от 1 до 360.", "rent_delete": "Удалить аренду", "rent_del_confirm": "Удалить аренду из приложения? Уже записанные платежи останутся.", "house_replace_r": "Аренда уже настроена. Заменить её ипотекой?", "pg_main": "Главная", "pg_pay": "Расчётный лист", "pay_title": "Расчётный лист", "pay_desc": "Сфотографируйте или выберите фото расчётного листа. Приложение попробует прочитать зарплату нетто и брутто. Всегда проверяйте цифры перед добавлением.", "pay_camera": "📷 Сфотографировать", "pay_gallery": "🖼️ Выбрать из галереи", "pay_net_ph": "Зарплата нетто (то, что приходит на счёт)", "pay_gross_ph": "Зарплата брутто (необязательно)", "pay_employer_ph": "Работодатель (необязательно)", "pay_month_lbl": "Добавить в доходы за месяц:", "pay_save_img": "Сохранить изображение листа", "pay_found": "Найдено нетто {net}{gross}. Проверьте цифры.", "pay_found_gross": " · брутто {g}", "pay_none": "Не удалось прочитать зарплату. Введите вручную или сфотографируйте ровно и при хорошем свете.", "pay_raw": "Текст, прочитанный с листа", "pay_add": "Добавить в доходы", "pay_added": "Доход {amt} добавлен.", "pay_dup": "Лист с такой же суммой уже добавлен ({m}). Добавить всё равно?", "pay_err": "Введите корректную зарплату нетто.", "pay_hist": "Добавленные листы", "pay_hist_empty": "Листы ещё не добавлялись.", "pay_note": "Расчётный лист", "pay_gross_lbl": "Брутто {g}", "pay_view": "Лист", "pay_del_confirm": "Удалить этот лист и записанный по нему доход?", "pay_slip_month": "Месяц листа (если распознан):", "pg_cal": "Календарь", "cal_total": "Всего расходов за месяц", "cal_day_total": "Расходы за этот день", "cal_none": "В этот день расходов не было.", "cal_income": "Доходы за этот день", "cal_prev": "Предыдущий месяц", "cal_next": "Следующий месяц", "share_title": "Поделиться", "share_desc": "Отправьте сводку в WhatsApp тому, кого выберете.", "share_months_lbl": "Сколько месяцев отправить", "share_n1": "Текущий месяц", "share_nn": "Последние {n} мес.", "share_btn": "📤 Отправить данные в WhatsApp", "share_empty": "Нет данных для отправки за этот период.", "msg_title": "📊 Сводка за {month}", "msg_inc": "Доходы: {amt}", "msg_exp": "Расходы: {amt}", "msg_bal": "Осталось на счёте: {amt}", "msg_cats": "По категориям:", "msg_more": "и ещё {n} категорий", "msg_foot": "Отправлено из приложения учёта расходов", "scan_no_name": "Название заведения не найдено. Введите его или выберите из списка.", "and_title": "Чтение уведомлений (приложение Android)", "and_on": "✔ Чтение уведомлений включено", "and_off": "✖ Чтение уведомлений выключено. Нажмите кнопку и разрешите доступ к уведомлениям.", "and_btn": "Включить доступ к уведомлениям", "and_battery": "Не останавливать в фоне (батарея)", "and_hint": "Уведомления об оплате (Wallet, банк, AliExpress) записываются как расходы. Если приложение закрыто, они добавятся при его открытии.", "bk_done_android": "Резервная копия сохранена в папке «Загрузки» на телефоне."}, "ar": {"title": "متتبع المصاريف الشخصية", "nag_title": "لم تقم بنسخ بياناتك احتياطيًا مؤخرًا.", "nag_btn": "تنزيل نسخة احتياطية الآن", "prev_month": "الشهر السابق", "next_month": "الشهر التالي", "carry_lbl": "الرصيد المرحّل من الأشهر السابقة:", "incomes_lbl": "الدخل:", "expenses_lbl": "المصاريف:", "balance_lbl": "المتبقي في الحساب:", "scan_camera": "📷 تصوير الإيصال", "scan_gallery": "🖼️ اختيار من المعرض", "warm_btn": "تنزيل الماسح للعمل بدون إنترنت", "dup_title": "تنبيه: يبدو أن هذا الإيصال سُجّل بالفعل.", "dup_cancel": "إلغاء، لا تسجّل", "dup_allow": "سجّل على أي حال", "tab_expense": "مصروف", "tab_income": "دخل", "amount_ph": "المبلغ بالشيكل (مثلاً 15000)", "newcat_ph": "اسم الفئة الجديدة", "note_ph": "اسم المتجر أو ملاحظة (اختياري)", "del_merchant": "حذف هذا المتجر من القائمة", "add_expense": "إضافة مصروف", "add_income": "إضافة دخل", "cat_title_exp": "المصاريف حسب الفئة", "cat_title_inc": "الدخل حسب الفئة", "month_entries": "معاملات الشهر", "auto_title": "إضافة تلقائية من الإشعارات", "auto_desc": "اختبر كيف يفهم التطبيق إشعار الدفع. الصق نصًا مثل \"₪66.60 في City Market\" واضغط الزر.", "notif_ph": "الصق نص الإشعار هنا", "notif_btn": "اختبار وإضافة", "macro_sum": "الرابط لإعداد MacroDroid", "macro_desc": "العنوان الذي يجب فتحه عند كل إشعار:", "backup_title": "النسخ الاحتياطي والاستعادة", "backup_dl": "تنزيل نسخة احتياطية كملف", "backup_text_btn": "عرض النسخة كنص للنسخ", "backup_ph": "ستظهر هنا نسخة للنسخ. للاستعادة، الصق نسخة هنا واضغط استعادة.", "restore_text": "الاستعادة من النص", "viewer_close": "إغلاق", "receipt_alt": "إيصال", "net_on": "متصل بالإنترنت. التطبيق يعمل أيضًا بدون إنترنت.", "net_off": "لا يوجد إنترنت. التطبيق يعمل كالمعتاد.", "no_merchant": "اختر من المتاجر المحفوظة…", "new_cat_opt": "＋ فئة جديدة…", "err_amount": "يرجى إدخال مبلغ صحيح", "err_catname": "يرجى كتابة اسم للفئة", "err_nospace": "لا توجد مساحة لحفظ صورة الإيصال. تم حفظ المعاملة بدونها.", "left_lbl": "المتبقي:", "receipt_btn": "🧾 الإيصال", "delete_btn": "حذف", "more_n": "▾ عرض {n} أخرى", "more_one": "▾ عرض معاملة أخرى", "less_btn": "▴ عرض أقل", "no_entries": "لا توجد معاملات هذا الشهر.", "no_entries_tab": "لا توجد معاملات في هذا التبويب بعد.", "pending_note": "سيتم حفظ الإيصال مع المعاملة", "pending_remove": "إزالة", "dup_info": "{name}، {amt}، سُجّل في {date}.", "dup_allowed": "حسنًا. يمكنك الضغط على \"إضافة مصروف\" لتسجيله مرة أخرى.", "dup_cancelled": "تم إلغاء المسح ولم يُسجَّل شيء.", "scan_prepare": "جارٍ تجهيز الصورة…", "scan_reading": "جارٍ قراءة الإيصال…", "scan_reading_first": "جارٍ قراءة الإيصال. في المرة الأولى يتم تنزيل مكونات ويلزم الإنترنت…", "scan_found": "تم التعرف على {amt}. تحقق من المبلغ والفئة ثم اضغط \"إضافة مصروف\".", "scan_no_amount": "لم يتم العثور على مبلغ. أدخله يدويًا وستُحفظ الصورة مع المعاملة.", "scan_nolib": "لم يتم تحميل الماسح. اتصل بالإنترنت مرة واحدة وأعد تحميل الصفحة. يمكنك الإدخال يدويًا.", "scan_fail": "تعذرت قراءة الإيصال. يمكنك الإدخال يدويًا وستُحفظ الصورة مع المعاملة.", "warm_need_net": "يلزم اتصال بالإنترنت لتنزيل المكونات. اتصل وأعد تحميل الصفحة.", "warm_downloading": "جارٍ تنزيل مكونات الماسح… قد يستغرق دقيقة.", "warm_done": "الماسح جاهز للعمل أيضًا بدون إنترنت.", "warm_fail": "فشل التنزيل. تحقق من الاتصال وحاول مرة أخرى.", "bk_done": "تم تنزيل النسخة بما فيها صور الإيصالات. إن لم يظهر ملف، استخدم عرض النص.", "bk_fail": "لم ينجح التنزيل هنا. استخدم عرض النص للنسخ.", "bk_text": "انسخ النص (بدون صور الإيصالات) والصقه في حقل الاستعادة في التطبيق الجديد.", "bk_invalid": "النسخة الاحتياطية غير صالحة.", "bk_restored": "تمت استعادة {n} معاملة.", "img_missing": "لم يتم العثور على الصورة في هذا المتصفح.", "q_seen": "تم التقاط هذا الإشعار قبل لحظة. لم تتم إضافة نسخة مكررة.", "q_foreign": "الخصم بعملة أجنبية. اكتب المبلغ بالشيكل واضغط \"إضافة مصروف\".", "q_noamount": "لم يتم العثور على مبلغ في الإشعار. أدخله يدويًا.", "q_added_exp": "تمت إضافة مصروف بقيمة {amt}{m}، الفئة: {cat}.", "q_added_inc": "تمت إضافة دخل بقيمة {amt}{m}، الفئة: {cat}.", "q_undo": "تراجع", "q_undone": "تم التراجع.", "rec_title": "المصاريف الثابتة والأقساط", "rec_desc": "هاتف بالأقساط، باقة جوال، اشتراكات: يسجّلها التطبيق تلقائيًا في بداية كل شهر.", "rec_add_btn": "＋ إضافة مصروف ثابت أو أقساط", "rec_name_ph": "ما هو؟ (مثلاً: هاتف)", "rec_amount_ph": "المبلغ الشهري بالشيكل (مثلاً 300)", "rec_n_ph": "عدد الدفعات (فارغ = بلا نهاية)", "rec_paid_ph": "عدد الدفعات المدفوعة مسبقًا (إن وُجدت)", "rec_start_lbl": "شهر الدفعة الأولى:", "rec_cash_ph": "السعر نقدًا دفعة واحدة (اختياري)", "rec_income_ph": "الدخل الشهري لفحص الملاءمة", "rec_save": "حفظ وبدء الخصم", "rec_total_month": "إجمالي الالتزامات الثابتة شهريًا:", "rec_progress": "الدفعة {p} من {n}", "rec_ongoing": "بلا نهاية", "rec_left_total": "المتبقي للدفع: {amt}", "rec_ends": "ينتهي في {month}", "rec_finished": "انتهى", "rec_not_started": "يبدأ في {month}", "rec_stop": "إيقاف وحذف", "rec_stop_confirm": "إيقاف الدفعة الثابتة \"{name}\"؟ ستبقى المعاملات المسجلة سابقًا.", "rec_err_name": "يرجى كتابة ما هو", "rec_err_amount": "يرجى إدخال مبلغ شهري صحيح", "rec_err_paid": "يجب أن يكون عدد الدفعات المدفوعة أقل من العدد الكلي للدفعات.", "rec_saved": "تم الحفظ. {name}: {amt} كل شهر.", "pv_hint": "أدخل مبلغًا شهريًا لرؤية الحساب.", "pv_monthly": "يُخصم كل شهر: {amt}", "pv_count": "عدد الدفعات: {n}", "pv_paid_left": "دُفع {p} ومتبقٍ {r}", "pv_total": "الإجمالي الذي ستدفعه: {amt}", "pv_left": "المتبقي للدفع من الآن: {amt}", "pv_last": "الدفعة الأخيرة: {month}", "pv_year": "بلا نهاية: {amt} في السنة", "pv_cash_more": "السعر نقدًا {cash}. بالأقساط ستدفع أكثر بمقدار {diff} ({pct}%).", "pv_cash_same": "السعر نقدًا {cash}. لا توجد تكلفة إضافية للأقساط.", "pv_check_title": "هل تستطيع تحمّل ذلك؟", "pv_no_income": "أدخل دخلك الشهري لفحص ما إذا كان هذا مناسبًا.", "pv_breakdown": "الدخل {inc}، متوسط المصاريف العادية {exp}، الثابتة الحالية {fix}، المصروف الجديد {new}. المتبقي شهريًا: {left}.", "pv_ok": "✅ مريح: ستكون الالتزامات الثابتة {pct}% من الدخل.", "pv_warn": "⚠️ ممكن لكنه ضيق: ستكون الالتزامات الثابتة {pct}% من الدخل.", "pv_bad": "⛔ ثقيل جدًا: ستكون الالتزامات الثابتة {pct}% من الدخل.", "pv_neg": "⛔ غير مستحسن: وفق متوسطاتك سيكون الحساب بعجز {amt} كل شهر.", "pv_disclaimer": "تقدير تقريبي بحسب بياناتك، وليس نصيحة مالية.", "pv_no_history": "لا توجد بيانات مصاريف سابقة بعد، لذلك لم تُحتسب المصاريف العادية.", "rec_day_ph": "يوم الخصم من الشهر (1-31)", "pv_day": "يُخصم في اليوم {d} من كل شهر", "rec_on_day": "يُخصم في اليوم {d}", "rec_first_on": "الدفعة الأولى في {date}", "cat_del_confirm": "حذف الفئة \"{name}\"؟ ستبقى المعاملات الحالية بهذه الفئة.", "cat_del_aria": "حذف الفئة", "mort_title": "الرهن العقاري", "mort_hint": "اضغط لإعداد الرهن العقاري", "mort_name": "الرهن العقاري", "mort_form_desc": "أضف مسارًا واحدًا أو أكثر كما هو مكتوب في موافقة الرهن.", "mort_edit": "تعديل", "mort_per_month": "يُخصم في {d} من كل شهر", "mort_left": "المتبقي {amt} · تم دفع {p}%", "mort_interest": "منها فائدة", "mort_principal": "منها أصل الدين", "mort_progress": "الدفعات", "mort_progress_v": "{m} من {n}", "mort_total_int": "إجمالي الفائدة حتى النهاية", "mort_end": "الانتهاء المتوقع", "mort_track_n": "المسار {n}", "mort_remove": "إزالة", "mort_amount_ph": "مبلغ المسار بالشيكل", "mort_rate_ph": "الفائدة السنوية % (مثلًا 4.5)", "mort_years_ph": "عدد السنوات", "mort_add_track": "+ إضافة مسار", "mort_start_lbl": "متى بدأ الرهن العقاري؟", "mort_day_ph": "يوم الشهر الذي تُخصم فيه الدفعة", "mort_save": "حفظ", "mort_delete": "حذف الرهن العقاري", "mort_del_confirm": "حذف الرهن العقاري من التطبيق؟ الدفعات المسجلة ستبقى.", "mort_err_track": "يرجى ملء المسار {n} بشكل صحيح: المبلغ والفائدة (0-30) والسنوات (1-40).", "mort_err_start": "يرجى اختيار موعد بدء الرهن.", "mort_err_day": "يرجى إدخال يوم من الشهر بين 1 و31.", "mort_track_info": "فائدة {r}% · {y} سنة · {p} شهريًا", "mort_whatif": "ماذا لو دفعت مبلغًا إضافيًا كل شهر؟", "mort_extra_ph": "دفعة إضافية بالشيكل", "mort_whatif_res": "توفر حوالي {amt} من الفائدة وتنتهي قبل {m} شهرًا ({end})", "mort_note": "الحساب بفائدة ثابتة (جدول شبيتسر). في مسار البرايم أو المرتبط ستتغير الدفعة الفعلية. يمكن تحديث الفائدة عند التعديل.", "mort_toggle": "إظهار أو إخفاء", "mt_p": "برايم", "mt_fu": "ثابتة غير مرتبطة", "mt_fl": "ثابتة مرتبطة", "mt_v": "متغيرة", "mt_o": "أخرى", "house_title": "السكن", "house_hint": "رهن عقاري أو إيجار", "house_mort": "رهن عقاري", "house_rent": "إيجار", "house_sum_mort": "{amt} شهريًا", "house_sum_rent": "{amt} شهريًا · متبقي {n} شهرًا", "house_replace": "الرهن العقاري معرّف بالفعل. استبداله بالإيجار؟", "rent_name": "إيجار", "rent_amount_ph": "الإيجار الشهري بالشيكل", "rent_months_ph": "مدة العقد بالأشهر", "rent_more": "تفاصيل إضافية (اختياري)", "rent_start_lbl": "متى بدأ العقد؟", "rent_day_ph": "يوم الشهر الذي تُخصم فيه الدفعة (الافتراضي 1)", "rent_total": "الإجمالي للفترة", "rent_left_pay": "المتبقي للدفع", "rent_months_left": "الأشهر المتبقية", "rent_progress": "الشهر {m} من {n}", "rent_finished": "انتهى العقد", "rent_err_amount": "يرجى إدخال مبلغ إيجار صحيح.", "rent_err_months": "يرجى إدخال عدد أشهر بين 1 و360.", "rent_delete": "حذف الإيجار", "rent_del_confirm": "حذف الإيجار من التطبيق؟ الدفعات المسجلة ستبقى.", "house_replace_r": "الإيجار معرّف بالفعل. استبداله بالرهن العقاري؟", "pg_main": "الرئيسية", "pg_pay": "قسيمة الراتب", "pay_title": "قسيمة الراتب", "pay_desc": "صوّر قسيمة الراتب أو اخترها من المعرض. سيحاول التطبيق قراءة الراتب الصافي والإجمالي. تحقق دائمًا من الأرقام قبل الإضافة.", "pay_camera": "📷 تصوير", "pay_gallery": "🖼️ اختيار من المعرض", "pay_net_ph": "الراتب الصافي (ما يصل إلى حسابك)", "pay_gross_ph": "الراتب الإجمالي (اختياري)", "pay_employer_ph": "اسم صاحب العمل (اختياري)", "pay_month_lbl": "إضافة إلى دخل شهر:", "pay_save_img": "حفظ صورة القسيمة", "pay_found": "تم التعرف على الصافي {net}{gross}. تحقق من الأرقام.", "pay_found_gross": " · الإجمالي {g}", "pay_none": "لم أتمكن من قراءة الراتب. اكتبه يدويًا أو أعد التصوير بشكل مستقيم وبإضاءة جيدة.", "pay_raw": "النص المقروء من القسيمة", "pay_add": "إضافة إلى الدخل", "pay_added": "تمت إضافة دخل بقيمة {amt}.", "pay_dup": "تمت إضافة قسيمة بنفس المبلغ ({m}). إضافة على أي حال؟", "pay_err": "يرجى إدخال راتب صافٍ صحيح.", "pay_hist": "القسائم المضافة", "pay_hist_empty": "لم تتم إضافة قسائم بعد.", "pay_note": "قسيمة راتب", "pay_gross_lbl": "الإجمالي {g}", "pay_view": "القسيمة", "pay_del_confirm": "حذف هذه القسيمة والدخل المسجل منها؟", "pay_slip_month": "شهر القسيمة (إن تم التعرف عليه):", "pg_cal": "التقويم", "cal_total": "إجمالي مصروفات الشهر", "cal_day_total": "المصروف في هذا اليوم", "cal_none": "لا توجد مصروفات في هذا اليوم.", "cal_income": "الدخل في هذا اليوم", "cal_prev": "الشهر السابق", "cal_next": "الشهر التالي", "share_title": "مشاركة", "share_desc": "أرسل ملخصًا عبر واتساب لمن تختار.", "share_months_lbl": "كم شهرًا تريد إرسالها", "share_n1": "الشهر الحالي", "share_nn": "آخر {n} أشهر", "share_btn": "📤 إرسال البيانات عبر واتساب", "share_empty": "لا توجد بيانات لإرسالها في هذه الفترة.", "msg_title": "📊 ملخص {month}", "msg_inc": "الدخل: {amt}", "msg_exp": "المصروفات: {amt}", "msg_bal": "المتبقي في الحساب: {amt}", "msg_cats": "حسب الفئة:", "msg_more": "و{n} فئات أخرى", "msg_foot": "أُرسل من تطبيق متابعة المصروفات", "scan_no_name": "لم يتم العثور على اسم النشاط. اكتبه أو اختره من القائمة.", "and_title": "قراءة الإشعارات (تطبيق أندرويد)", "and_on": "✔ قراءة الإشعارات مفعّلة", "and_off": "✖ قراءة الإشعارات متوقفة. اضغط الزر واسمح بالوصول إلى الإشعارات.", "and_btn": "تفعيل الوصول إلى الإشعارات", "and_battery": "منع الإيقاف في الخلفية (البطارية)", "and_hint": "إشعارات الدفع (Wallet والبنك وعلي إكسبريس) تُسجَّل كمصروف. إذا كان التطبيق مغلقًا تُضاف عند فتحه.", "bk_done_android": "تم حفظ النسخة الاحتياطية في مجلد التنزيلات على هاتفك."}};
+var CATNAMES = {"he": {"אוכל": "אוכל", "תחבורה": "תחבורה", "בילוי": "בילוי", "קניות": "קניות", "חשבונות": "חשבונות", "אחר": "אחר", "משכורת": "משכורת", "עבודה פרטית": "עבודה פרטית", "קצבה": "קצבה", "מתנה": "מתנה", "החזר כספי": "החזר כספי", "השקעות": "השקעות", "משכנתא": "משכנתא", "שכירות": "שכירות"}, "en": {"אוכל": "Food", "תחבורה": "Transport", "בילוי": "Entertainment", "קניות": "Shopping", "חשבונות": "Bills", "אחר": "Other", "משכורת": "Salary", "עבודה פרטית": "Freelance work", "קצבה": "Allowance", "מתנה": "Gift", "החזר כספי": "Refund", "השקעות": "Investments", "משכנתא": "Mortgage", "שכירות": "Rent"}, "ru": {"אוכל": "Еда", "תחבורה": "Транспорт", "בילוי": "Развлечения", "קניות": "Покупки", "חשבונות": "Счета", "אחר": "Другое", "משכורת": "Зарплата", "עבודה פרטית": "Подработка", "קצבה": "Пособие", "מתנה": "Подарок", "החזר כספי": "Возврат", "השקעות": "Инвестиции", "משכנתא": "Ипотека", "שכירות": "Аренда"}, "ar": {"אוכל": "طعام", "תחבורה": "مواصلات", "בילוי": "ترفيه", "קניות": "تسوق", "חשבונות": "فواتير", "אחר": "أخرى", "משכורת": "راتب", "עבודה פרטית": "عمل حر", "קצבה": "مخصصات", "מתנה": "هدية", "החזר כספי": "استرداد", "השקעות": "استثمارات", "משכנתא": "الرهن العقاري", "שכירות": "إيجار"}};
+var LOCALES = { he: 'he-IL', en: 'en-GB', ru: 'ru-RU', ar: 'ar-u-nu-latn' };
+var lang = 'he';
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('lang'); } catch (e) {}
+  if (!I18N[saved]) {
+    var nav = String((navigator.language || 'he')).slice(0, 2).toLowerCase();
+    saved = I18N[nav] ? nav : 'en';
+  }
+  lang = saved;
+})();
+function t(key, vars) {
+  var str = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+  if (vars) Object.keys(vars).forEach(function (k) { str = str.split('{' + k + '}').join(vars[k]); });
+  return str;
+}
+function esc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function catLabel(c) { return (CATNAMES[lang] && CATNAMES[lang][c]) || c; }
+function dateStr(e) { return new Date(e.id || Date.now()).toLocaleDateString(LOCALES[lang]); }
+function ocrLangs() { return ['heb', 'eng'].concat(lang === 'ru' ? ['rus'] : lang === 'ar' ? ['ara'] : []); }
+function ocrKey() { return 'ocrReady:' + ocrLangs().join('+'); }
+var ocrReady = false;
+function refreshOcrReady() {
+  ocrReady = false;
+  try {
+    ocrReady = localStorage.getItem(ocrKey()) === '1' ||
+      (ocrKey() === 'ocrReady:heb+eng' && localStorage.getItem('ocrReady') === '1');
+  } catch (e) {}
+}
+function markOcrReady() {
+  try { localStorage.setItem(ocrKey(), '1'); } catch (e) {}
+  ocrReady = true;
+}
+function setLang(code) {
+  if (!I18N[code]) return;
+  lang = code;
+  try { localStorage.setItem('lang', code); } catch (e) {}
+  applyLang();
+}
+function applyLang() {
+  var h = document.documentElement;
+  h.lang = lang;
+  h.dir = (lang === 'he' || lang === 'ar') ? 'rtl' : 'ltr';
+  document.title = t('title');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function (el) { el.textContent = t(el.getAttribute('data-i18n')); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-ph]'), function (el) { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+  document.getElementById('viewerImg').alt = t('receipt_alt');
+  document.getElementById('langSel').value = lang;
+  refreshOcrReady();
+  updateWarm();
+  document.getElementById('scanStatus').innerText = '';
+  document.getElementById('toast').style.display = 'none';
+  document.getElementById('backupStatus').innerText = '';
+  document.getElementById('dupBox').style.display = 'none';
+  switchTab(currentType);
+  fillMerchants();
+  showPending();
+  updateNet();
+  renderRecurring();
+  renderHousing();
+  renderPayHist();
+  androidStatus();
+  fillShareMonths();
+  document.getElementById('payAddMonth').value = document.getElementById('payAddMonth').value || monthKey(Date.now());
+  updateRecPreview();
+}
+var currentType = 'expense';
+var DEFAULT_CATS = {
+  expense: ['אוכל','תחבורה','בילוי','קניות','חשבונות','אחר'],
+  income: ['משכורת','עבודה פרטית','קצבה','מתנה','החזר כספי','השקעות','אחר']
+};
+var NEW_OPT = '__new__';
+var cats = DEFAULT_CATS;
+function fmt(n) { return (n < 0 ? '−' : '') + Math.abs(n).toLocaleString(LOCALES[lang], { maximumFractionDigits: 2 }) + ' ₪'; }
+try { var sc = JSON.parse(localStorage.getItem('cats') || 'null'); if (sc && sc.expense && sc.income) cats = sc; } catch (e) {}
+try { entries = JSON.parse(localStorage.getItem('entries') || '[]'); } catch (e) { entries = []; }
+
+function save() {
+  try { localStorage.setItem('entries', JSON.stringify(entries)); } catch (e) {}
+  render();
+}
+
+function switchTab(type) {
+  currentType = type;
+  document.getElementById('tabExpense').classList.toggle('active', type === 'expense');
+  document.getElementById('tabIncome').classList.toggle('active', type === 'income');
+  document.getElementById('addBtn').innerText = type === 'expense' ? t('add_expense') : t('add_income');
+  fillCategories();
+  render();
+}
+
+function fillCategories(selected) {
+  var sel = document.getElementById('category');
+  sel.innerHTML = cats[currentType].map(function (c) {
+    return '<option value="' + esc(c) + '">' + esc(catLabel(c)) + '</option>';
+  }).join('') + '<option value="' + NEW_OPT + '">' + esc(t('new_cat_opt')) + '</option>';
+  if (selected) sel.value = selected;
+  onCatChange();
+  buildPicker('category');
+  if (document.getElementById('recCat')) fillRecCats();
+}
+
+
+// ---- category picker: a list where each category has a small X ----
+function buildPicker(selId) {
+  var sel = document.getElementById(selId);
+  if (!sel) return;
+  var box = document.getElementById('pick_' + selId);
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'pick_' + selId;
+    sel.parentNode.insertBefore(box, sel.nextSibling);
+    sel.style.display = 'none';
+  }
+  var cur = sel.value, open = box.getAttribute('data-open') === '1';
+  var label = sel.options.length && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
+  var html = '<button type="button" class="pk-btn" onclick="togglePicker(\'' + selId + '\')"><span>' + esc(label) + '</span><span>▾</span></button>' +
+    '<div class="pk-list" style="display:' + (open ? 'block' : 'none') + '">';
+  Array.prototype.forEach.call(sel.options, function (o) {
+    var canDel = o.value !== NEW_OPT && o.value !== 'אחר';
+    html += '<div class="pk-item" data-v="' + esc(o.value) + '" onclick="pickCat(\'' + selId + '\', this)">' +
+      '<span' + (o.value === cur ? ' style="font-weight:bold"' : '') + '>' + esc(o.text) + '</span>' +
+      (canDel ? '<button type="button" class="pk-x" aria-label="' + esc(t('cat_del_aria')) + '" onclick="event.stopPropagation();askDeleteCat(\'' + selId + '\', this)">✕</button>' : '') +
+      '</div>';
+  });
+  box.innerHTML = html + '</div>';
+}
+
+function togglePicker(selId) {
+  var box = document.getElementById('pick_' + selId);
+  box.setAttribute('data-open', box.getAttribute('data-open') === '1' ? '0' : '1');
+  buildPicker(selId);
+}
+
+function pickCat(selId, el) {
+  var sel = document.getElementById(selId);
+  sel.value = el.getAttribute('data-v');
+  document.getElementById('pick_' + selId).setAttribute('data-open', '0');
+  sel.dispatchEvent(new Event('change'));
+  buildPicker(selId);
+}
+
+function askDeleteCat(selId, btn) {
+  var name = btn.parentNode.getAttribute('data-v');
+  var type = selId === 'recCat' ? 'expense' : currentType;
+  if (!confirm(t('cat_del_confirm', { name: catLabel(name) }))) return;
+  cats[type] = cats[type].filter(function (c) { return c !== name; });
+  try { localStorage.setItem('cats', JSON.stringify(cats)); } catch (e) {}
+  var keep = document.getElementById('category').value;
+  fillCategories(keep === name ? undefined : keep);
+  fillRecCats();
+  render();
+}
+
+function onCatChange() {
+  var isNew = document.getElementById('category').value === NEW_OPT;
+  document.getElementById('newCat').style.display = isNew ? 'block' : 'none';
+}
+
+
+var merchants = {}, aliases = {}, lastGuess = '';
+try { merchants = JSON.parse(localStorage.getItem('merchants') || '{}') || {}; } catch (e) { merchants = {}; }
+try { aliases = JSON.parse(localStorage.getItem('aliases') || '{}') || {}; } catch (e) { aliases = {}; }
+
+function saveMerchants() {
+  try { localStorage.setItem('merchants', JSON.stringify(merchants)); } catch (e) {}
+  try { localStorage.setItem('aliases', JSON.stringify(aliases)); } catch (e) {}
+}
+
+function fillMerchants(selected) {
+  var sel = document.getElementById('merchantSel');
+  var names = Object.keys(merchants).sort(function (a, b) {
+    return (merchants[b].n || 0) - (merchants[a].n || 0) || a.localeCompare(b);
+  });
+  sel.innerHTML = '<option value="">' + esc(t('no_merchant')) + '</option>' + names.map(function (n) {
+    return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+  }).join('');
+  sel.style.display = names.length ? 'block' : 'none';
+  if (selected && merchants[selected]) sel.value = selected;
+  document.getElementById('delMerchantBtn').style.display = (selected && merchants[selected]) ? 'block' : 'none';
+}
+
+function onMerchantPick() {
+  var name = document.getElementById('merchantSel').value;
+  if (!name) { document.getElementById('delMerchantBtn').style.display = 'none'; return; }
+  document.getElementById('note').value = name;
+  var m = merchants[name];
+  if (m && m.cat && currentType === 'expense' && cats.expense.indexOf(m.cat) !== -1) fillCategories(m.cat);
+  document.getElementById('delMerchantBtn').style.display = 'block';
+}
+
+function deleteMerchant() {
+  var name = document.getElementById('merchantSel').value;
+  if (!name) return;
+  delete merchants[name];
+  Object.keys(aliases).forEach(function (k) { if (aliases[k] === name) delete aliases[k]; });
+  saveMerchants();
+  document.getElementById('note').value = '';
+  fillMerchants();
+}
+
+// find a saved business name inside a text (longest match wins), or a learned correction
+function matchMerchant(text, guess) {
+  var t = String(text || '').toLowerCase();
+  var best = '';
+  Object.keys(merchants).forEach(function (n) {
+    if (n.length >= 3 && t.indexOf(n.toLowerCase()) !== -1 && n.length > best.length) best = n;
+  });
+  if (best) return best;
+  if (guess && aliases[guess]) return aliases[guess];
+  return '';
+}
+
+function rememberMerchant(name, category, type) {
+  name = (name || '').trim();
+  if (!name || name.length > 40) return;
+  var m = merchants[name] || { n: 0 };
+  m.n = (m.n || 0) + 1;
+  if (type === 'expense' && category) m.cat = category;
+  merchants[name] = m;
+  if (lastGuess && lastGuess !== name) aliases[lastGuess] = name;
+  lastGuess = '';
+  saveMerchants();
+}
+
+function addEntry() {
+  var amount = parseFloat(document.getElementById('amount').value);
+  if (!amount || amount <= 0) { alert(t('err_amount')); return; }
+  if (pendingFp && !dupOk && currentType === 'expense') {
+    var dupE = findDuplicate(pendingFp, amount, document.getElementById('note').value);
+    if (dupE) { showDup(dupE); return; }
+  }
+  var category = document.getElementById('category').value;
+  if (category === NEW_OPT) {
+    category = document.getElementById('newCat').value.trim();
+    if (!category) { alert(t('err_catname')); return; }
+    if (cats[currentType].indexOf(category) === -1) {
+      cats[currentType].splice(Math.max(cats[currentType].length - 1, 0), 0, category);
+      try { localStorage.setItem('cats', JSON.stringify(cats)); } catch (e) {}
+    }
+  }
+  rememberMerchant(document.getElementById('note').value, category, currentType);
+  entries.unshift({
+    id: Date.now(),
+    amount: amount,
+    category: category,
+    note: document.getElementById('note').value.trim(),
+    type: currentType,
+    date: new Date().toLocaleDateString('he-IL')
+  });
+  if (pendingFp) { entries[0].fp = { d: pendingFp.d, t: pendingFp.t, h: pendingFp.h }; }
+  if (pendingImg) {
+    try { localStorage.setItem('img_' + entries[0].id, pendingImg); entries[0].img = true; }
+    catch (err) { alert(t('err_nospace')); }
+    clearPending();
+  }
+  document.getElementById('amount').value = '';
+  document.getElementById('newCat').value = '';
+  document.getElementById('note').value = '';
+  fillMerchants();
+  fillCategories(category);
+  viewMonth = monthKey(Date.now());
+  save();
+}
+
+function removeEntry(id) {
+  var gone = entries.filter(function (e) { return e.id === id; })[0];
+  if (gone && gone.rec) {
+    var rr = recurring.filter(function (x) { return x.id === gone.rec; })[0];
+    if (rr) { rr.skip = rr.skip || []; if (rr.skip.indexOf(gone.k) === -1) rr.skip.push(gone.k); saveRecurring(); }
+    else if (gone.rec === 'rent' && rent) { rent.skip = rent.skip || []; if (rent.skip.indexOf(gone.k) === -1) rent.skip.push(gone.k); saveRent(); }
+    else if (gone.rec === 'mortgage' && mortgage) { mortgage.skip = mortgage.skip || []; if (mortgage.skip.indexOf(gone.k) === -1) mortgage.skip.push(gone.k); saveMortgage(); }
+  }
+  try { localStorage.removeItem('img_' + id); } catch (err) {}
+  entries = entries.filter(function (e) { return e.id !== id; });
+  save();
+}
+
+function sum(type) {
+  return entries.filter(function (e) { return e.type === type; })
+    .reduce(function (s, e) { return s + e.amount; }, 0);
+}
+
+function monthKey(t) {
+  var d = new Date(t);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+}
+function entryMonth(e) { return monthKey(e.id || Date.now()); }
+function net(e) { return e.type === 'income' ? e.amount : -e.amount; }
+var viewMonth = monthKey(Date.now());
+var showAllEntries = false;
+function toggleEntries() { showAllEntries = !showAllEntries; render(); }
+
+function moveMonth(step) {
+  var p = viewMonth.split('-');
+  var k = monthKey(new Date(+p[0], +p[1] - 1 + step, 1).getTime());
+  if (k > monthKey(Date.now())) return;
+  viewMonth = k;
+  showAllEntries = false;
+  render();
+}
+
+function render() {
+  try { renderCal(); } catch (e) {}
+  var nowKey = monthKey(Date.now());
+  var p = viewMonth.split('-');
+  document.getElementById('monthLabel').innerText =
+    new Date(+p[0], +p[1] - 1, 1).toLocaleDateString(LOCALES[lang], { month: 'long', year: 'numeric' });
+  document.getElementById('nextMonthBtn').disabled = viewMonth >= nowKey;
+
+  var carry = 0, ms = [];
+  entries.forEach(function (e) {
+    var k = entryMonth(e);
+    if (k < viewMonth) carry += net(e);
+    else if (k === viewMonth) ms.push(e);
+  });
+  var inc = 0, exp = 0;
+  ms.forEach(function (e) { if (e.type === 'income') inc += e.amount; else exp += e.amount; });
+  var bal = carry + inc - exp;
+
+  var running = [], acc = carry;
+  for (var i = ms.length - 1; i >= 0; i--) { acc += net(ms[i]); running[i] = acc; }
+
+  var shown = showAllEntries ? ms : ms.slice(0, 3);
+  document.getElementById('expenseList').innerHTML = ms.length ? shown.map(function (e, i) {
+    var isInc = e.type === 'income';
+    var left = running[i];
+    return '<div class="row"><span>' + (e.rec ? '🔁 ' : '') + esc(catLabel(e.category)) + ' <span class="muted">· ' + esc(dateStr(e)) + '</span>' +
+      (e.note ? '<br><span class="muted">' + esc(e.note) + '</span>' : '') +
+      '<br><span class="muted">' + esc(t('left_lbl')) + ' </span><b class="' + (left >= 0 ? 'pos' : 'neg') + '">' + fmt(left) + '</b></span>' +
+      '<span><b class="' + (isInc ? 'pos' : 'neg') + '">' + (isInc ? '+' : '−') + fmt(e.amount) + '</b>' +
+      (e.img ? '<button class="del" onclick="showReceipt(' + e.id + ')">' + esc(t('receipt_btn')) + '</button>' : '') +
+      '<button class="del" onclick="removeEntry(' + e.id + ')" aria-label="' + esc(t('delete_btn')) + '">' + esc(t('delete_btn')) + '</button></span></div>';
+  }).join('') + (ms.length > 3
+    ? '<button class="del" style="display:block;width:100%;margin:10px 0 0;padding:10px;font-size:15px" onclick="toggleEntries()">' +
+      (showAllEntries ? t('less_btn') : (ms.length - 3 === 1 ? t('more_one') : t('more_n', { n: ms.length - 3 }))) + '</button>'
+    : '') : '<span class="muted">' + esc(t('no_entries')) + '</span>';
+
+  var c = document.getElementById('carry');
+  c.innerText = fmt(carry);
+  c.className = carry >= 0 ? 'pos' : 'neg';
+  document.getElementById('totalIncome').innerText = fmt(inc);
+  document.getElementById('totalExpense').innerText = fmt(exp);
+  var bEl = document.getElementById('balance');
+  bEl.innerText = t('balance_lbl') + ' ' + fmt(bal);
+  bEl.className = 'balance ' + (bal >= 0 ? 'pos' : 'neg');
+
+  document.getElementById('catTitle').innerText = currentType === 'income' ? t('cat_title_inc') : t('cat_title_exp');
+  var byCat = {};
+  ms.filter(function (e) { return e.type === currentType; }).forEach(function (e) {
+    byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+  });
+  var pairs = Object.keys(byCat).map(function (k) { return [k, byCat[k]]; });
+  document.getElementById('categorySummary').innerHTML = pairs.length
+    ? pairs.map(function (q) { return '<div class="row"><span>' + esc(catLabel(q[0])) + '</span><b>' + fmt(q[1]) + '</b></div>'; }).join('')
+    : '<span class="muted">' + esc(t('no_entries_tab')) + '</span>';
+}
+
+var pendingImg = null;
+
+function updateWarm() { document.getElementById('warmBtn').style.display = ocrReady ? 'none' : 'block'; }
+
+function showPending() {
+  document.getElementById('pendingBox').innerHTML = pendingImg
+    ? '<img class="thumb" src="' + pendingImg + '"> <span class="muted">' + esc(t('pending_note')) + '</span> <button class="del" onclick="clearPending()">' + esc(t('pending_remove')) + '</button>'
+    : '';
+}
+
+
+var pendingFp = null, dupOk = false, scanHash = '';
+
+function aHash(img) {
+  var c = document.createElement('canvas');
+  c.width = 16; c.height = 16;
+  var ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, 16, 16);
+  var d = ctx.getImageData(0, 0, 16, 16).data, g = [], sum = 0, i;
+  for (i = 0; i < d.length; i += 4) { var v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; g.push(v); sum += v; }
+  var avg = sum / g.length, hex = '';
+  for (i = 0; i < g.length; i += 4) {
+    var n = 0;
+    for (var j = 0; j < 4; j++) n = n * 2 + (g[i + j] > avg ? 1 : 0);
+    hex += n.toString(16);
+  }
+  return hex;
+}
+
+function hamming(a, b) {
+  if (!a || !b || a.length !== b.length) return 999;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) {
+    var x = parseInt(a.charAt(i), 16) ^ parseInt(b.charAt(i), 16);
+    while (x) { diff += x & 1; x >>= 1; }
+  }
+  return diff;
+}
+
+function pickDate(text) {
+  var re = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})(?!\d)/g, m;
+  while ((m = re.exec(text)) !== null) {
+    var dd = +m[1], mm = +m[2], yy = +m[3];
+    if (yy < 100) yy += 2000;
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yy >= 2000 && yy <= 2100) {
+      return yy + '-' + ('0' + mm).slice(-2) + '-' + ('0' + dd).slice(-2);
+    }
+  }
+  return '';
+}
+
+function pickTime(text) {
+  var m = String(text).match(/(?:^|[^\d:])([01]?\d|2[0-3]):([0-5]\d)(?![\d:])/);
+  return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : '';
+}
+
+function dayOf(e) {
+  var d = new Date(e.id || Date.now());
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+
+function findDuplicate(fp, amount, note) {
+  var name = String(note || '').trim().toLowerCase();
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (e.type !== 'expense') continue;
+    var f = e.fp;
+    if (f && fp.h && f.h && hamming(f.h, fp.h) <= 8) return e;
+    var sameAmount = Math.abs(e.amount - amount) < 0.005;
+    if (!sameAmount) continue;
+    if (f && fp.d && f.d === fp.d) {
+      if (f.t && fp.t) { if (f.t === fp.t) return e; }
+      else if (name && String(e.note || '').trim().toLowerCase() === name) return e;
+    }
+    if (!f && fp.d && dayOf(e) === fp.d && name && String(e.note || '').trim().toLowerCase() === name) return e;
+  }
+  return null;
+}
+
+function showDup(e) {
+  document.getElementById('dupInfo').innerText =
+    t('dup_info', { name: e.note || catLabel(e.category), amt: fmt(e.amount), date: dateStr(e) });
+  document.getElementById('dupBox').style.display = 'block';
+}
+
+function dupAllow() {
+  dupOk = true;
+  document.getElementById('dupBox').style.display = 'none';
+  document.getElementById('scanStatus').innerText = t('dup_allowed');
+}
+
+function dupCancel() {
+  clearPending();
+  document.getElementById('amount').value = '';
+  document.getElementById('note').value = '';
+  document.getElementById('scanStatus').innerText = t('dup_cancelled');
+}
+
+function clearPending() {
+  pendingImg = null;
+  pendingFp = null;
+  dupOk = false;
+  document.getElementById('dupBox').style.display = 'none';
+  showPending();
+  document.getElementById('receiptInput').value = '';
+  document.getElementById('receiptCamera').value = '';
+}
+
+function readImage(file) {
+  return new Promise(function (resolve, reject) {
+    var rd = new FileReader();
+    rd.onerror = reject;
+    rd.onload = function () {
+      var img = new Image();
+      img.onerror = reject;
+      img.onload = function () { resolve(img); };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  });
+}
+
+function drawScaled(img, maxSide) {
+  var r = Math.min(1, maxSide / Math.max(img.width, img.height));
+  var c = document.createElement('canvas');
+  c.width = Math.round(img.width * r);
+  c.height = Math.round(img.height * r);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+function sharpen(c) {
+  var ctx = c.getContext('2d');
+  var d = ctx.getImageData(0, 0, c.width, c.height);
+  var px = d.data;
+  for (var i = 0; i < px.length; i += 4) {
+    var g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    g = (g - 128) * 1.5 + 128;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    px[i] = px[i + 1] = px[i + 2] = g;
+  }
+  ctx.putImageData(d, 0, 0);
+  return c;
+}
+
+function runOcr(canvas, onProgress) {
+  if (typeof Tesseract === 'undefined') return Promise.reject({ code: 'no_lib' });
+  var worker = null;
+  return Tesseract.createWorker(ocrLangs(), 1, {
+    logger: function (m) { if (m.status === 'recognizing text' && onProgress) onProgress(m.progress); }
+  }).then(function (w) {
+    worker = w;
+    return worker.recognize(canvas);
+  }).then(function (res) {
+    markOcrReady();
+    updateWarm();
+    return worker.terminate().then(function () { return res.data.text; });
+  }).catch(function (e) {
+    if (worker) { try { worker.terminate(); } catch (err) {} }
+    throw e;
+  });
+}
+
+function pickAmount(text) {
+  var re = /(\d{1,3}(?:[,\s]\d{3})+|\d+)[.,](\d{2})(?!\d)/g;
+  var kw = /סה["״'׳]?כ|סהכ|לתשלום|סכום|total|amount|sum|balance|итого|сумма|всего|к оплате|المجموع|الإجمالي|المبلغ/i;
+  var all = [], key = [];
+  text.split('\n').forEach(function (line) {
+    var m;
+    re.lastIndex = 0;
+    while ((m = re.exec(line)) !== null) {
+      var after = line.charAt(m.index + m[0].length), before = line.charAt(m.index - 1);
+      if (/[.\/:\-]/.test(after) || /[\/:]/.test(before)) continue;
+      var v = parseFloat(m[1].replace(/[,\s]/g, '') + '.' + m[2]);
+      if (v > 0) { all.push(v); if (kw.test(line)) key.push(v); }
+    }
+  });
+  var pool = key.length ? key : all;
+  return pool.length ? Math.max.apply(null, pool) : null;
+}
+
+function guessCategory(text) {
+  var t = text.toLowerCase();
+  var rules = [
+    ['אוכל', /מסעדה|קפה|פיצה|בורגר|מאפה|מכולת|סופר|שופרסל|רמי לוי|יוחננוף|מגה|ויקטורי|אושר עד|restaurant|cafe|coffee|pizza|burger|market|супермаркет|кафе|ресторан|مطعم|مقهى|سوبرماركت|shufersal|rami levy|osher ?ad|yochananof|mega|victory|mika|aroma|cofix|wolt|10bis/],
+    ['תחבורה', /דלק|פז|סונול|דור אלון|חניה|רב.?קו|מונית|גט|gett|uber|fuel|parking|taxi/],
+    ['בילוי', /קולנוע|סינמה|פאב|בר |הופעה|cinema|movie|theater|pub/],
+    ['חשבונות', /חשמל|ארנונה|בזק|סלקום|פרטנר|הוט|מים|electric|water|telecom/],
+    ['קניות', /חנות|קניון|אופנה|store|shop|mall|магазин|متجر|محل/]
+  ];
+  for (var i = 0; i < rules.length; i++) {
+    if (rules[i][1].test(t) && cats.expense.indexOf(rules[i][0]) !== -1) return rules[i][0];
+  }
+  return null;
+}
+
+function guessNote(text) {
+  var lines = String(text || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  var bad = /חשבונית|קבלה|טלפון|טל[.:]|פקס|תאריך|שעה|קופה|קופאי|הזמנה|סה["״'׳]?כ|לתשלום|אשראי|מזומן|כתובת|רחוב|רח[.׳']|שד[.׳']|ישראל|מיקוד|מספר|תודה|לשבת|מוצר|כמות|סכום|פריט|ברקוד|www|\.com|@|invoice|receipt|tax|total|date|cashier|order|qty|amount|street|israel/i;
+  var idOf = /ח\.?\s*פ|עוסק|vat|reg\.?\s*no/i;
+  function clean(l) {
+    var c = l.replace(/[^A-Za-z\u0590-\u05FF\u0400-\u04FF\u0600-\u06FF'"״׳ \-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return c.replace(/\s*(בע["״]מ|בע׳מ|בעמ|בע|ltd\.?|inc\.?)\s*$/i, '').trim();
+  }
+  function ok(l) {
+    if (bad.test(l) || /[,،]/.test(l)) return '';
+    var c = clean(l), compact = l.replace(/\s/g, '');
+    if (c.replace(/[^A-Za-z\u0590-\u05FF\u0400-\u04FF\u0600-\u06FF]/g, '').length < 3) return '';
+    if (/\d{2,}/.test(l)) return '';
+    if (c.length / Math.max(compact.length, 1) < 0.6) return '';
+    var words = c.split(' ').filter(function (w) { return w.length > 1; });
+    if (!words.length || words.length > 4) return '';
+    if (words.length > 2 && words.join('').length / words.length < 2.2) return '';
+    return c;
+  }
+  var head = lines.slice(0, 10), idAt = -1, i, c;
+  for (i = 0; i < head.length; i++) { if (idOf.test(head[i])) { idAt = i; break; } }
+  if (idAt > 0) {
+    for (i = 0; i < idAt; i++) { c = ok(head[i]); if (c) return c.slice(0, 30); }
+  }
+  for (i = 0; i < head.length; i++) { c = ok(head[i]); if (c) return c.slice(0, 30); }
+  var promo = String(text || '').match(/(?:בפעם הבאה|בביקור הבא)\s*ב([A-Za-z\u0590-\u05FF'׳]{2,}(?: [A-Za-z\u0590-\u05FF'׳]{2,})?)/);
+  if (promo) return promo[1].trim().slice(0, 30);
+  return '';
+}
+
+function scanReceipt(inp) {
+  var file = (inp || document.getElementById('receiptInput')).files[0];
+  var st = document.getElementById('scanStatus');
+  if (!file) return;
+  st.innerText = t('scan_prepare');
+  readImage(file).then(function (img) {
+    pendingImg = drawScaled(img, 1100).toDataURL('image/jpeg', 0.7);
+    scanHash = aHash(img);
+    showPending();
+    var canvas = sharpen(drawScaled(img, 1600));
+    st.innerText = ocrReady ? t('scan_reading') : t('scan_reading_first');
+    return runOcr(canvas, function (pr) { st.innerText = t('scan_reading') + ' ' + Math.round(pr * 100) + '%'; });
+  }).then(function (text) {
+    var amt = pickAmount(text);
+    switchTab('expense');
+    if (amt) document.getElementById('amount').value = amt;
+    var cat = guessCategory(text);
+    if (cat) fillCategories(cat);
+    var guess = guessNote(text);
+    lastGuess = guess || '';
+    var known = matchMerchant(text, guess);
+    var note = known || guess;
+    if (note) document.getElementById('note').value = note;
+    if (known && merchants[known] && merchants[known].cat && cats.expense.indexOf(merchants[known].cat) !== -1) {
+      fillCategories(merchants[known].cat);
+    }
+    if (known) fillMerchants(known);
+    st.innerText = (amt ? t('scan_found', { amt: fmt(amt) }) : t('scan_no_amount')) + (note ? '' : ' ' + t('scan_no_name'));
+    pendingFp = { d: pickDate(text), t: pickTime(text), h: scanHash };
+    dupOk = false;
+    var dup = findDuplicate(pendingFp, amt || 0, document.getElementById('note').value);
+    if (dup) showDup(dup);
+  }).catch(function (e) {
+    st.innerText = e && e.code === 'no_lib'
+      ? t('scan_nolib')
+      : t('scan_fail');
+  });
+}
+
+function warmOcr() {
+  var st = document.getElementById('scanStatus');
+  if (typeof Tesseract === 'undefined') { st.innerText = t('warm_need_net'); return; }
+  st.innerText = t('warm_downloading');
+  Tesseract.createWorker(ocrLangs(), 1).then(function (w) { return w.terminate(); }).then(function () {
+    markOcrReady();
+    updateWarm();
+    st.innerText = t('warm_done');
+  }).catch(function () { st.innerText = t('warm_fail'); });
+}
+
+function buildBackup(withImages) {
+  var data = { v: 1, entries: entries, cats: cats, merchants: merchants, aliases: aliases, recurring: recurring, mortgage: mortgage, rent: rent, images: {} };
+  if (withImages) {
+    entries.forEach(function (e) {
+      if (!e.img) return;
+      try { var im = localStorage.getItem('img_' + e.id); if (im) data.images[e.id] = im; } catch (err) {}
+    });
+  }
+  return JSON.stringify(data);
+}
+
+function backupMsg(t) { document.getElementById('backupStatus').innerText = t; }
+
+function downloadBackup() {
+  try {
+    if (window.AndroidBridge && AndroidBridge.saveFile) {
+      var okSave = AndroidBridge.saveFile('expenses-backup-' + new Date().toISOString().slice(0, 10) + '.json', buildBackup(true));
+      if (okSave) { markBackup(); backupMsg(t('bk_done_android')); } else { backupMsg(t('bk_fail')); }
+      return;
+    }
+    var blob = new Blob([buildBackup(true)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'expenses-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    markBackup();
+    backupMsg(t('bk_done'));
+  } catch (err) { backupMsg(t('bk_fail')); }
+}
+
+function showBackupText() {
+  var box = document.getElementById('backupText');
+  box.value = buildBackup(false);
+  box.focus();
+  box.select();
+  markBackup();
+  backupMsg(t('bk_text'));
+}
+
+function restoreFromText(text) {
+  var d;
+  try { d = JSON.parse(text); } catch (err) { backupMsg(t('bk_invalid')); return; }
+  if (!d || !Array.isArray(d.entries)) { backupMsg(t('bk_invalid')); return; }
+  var have = {}, added = 0;
+  entries.forEach(function (e) { have[e.id] = 1; });
+  d.entries.forEach(function (e) {
+    if (e && e.id && e.amount > 0 && !have[e.id]) { entries.push(e); have[e.id] = 1; added++; }
+  });
+  entries.sort(function (a, b) { return b.id - a.id; });
+  if (d.cats) {
+    ['expense', 'income'].forEach(function (k) {
+      (d.cats[k] || []).forEach(function (c) {
+        if (cats[k].indexOf(c) === -1) cats[k].splice(Math.max(cats[k].length - 1, 0), 0, c);
+      });
+    });
+    try { localStorage.setItem('cats', JSON.stringify(cats)); } catch (err) {}
+  }
+  if (d.merchants) {
+    Object.keys(d.merchants).forEach(function (k) { if (!merchants[k]) merchants[k] = d.merchants[k]; });
+  }
+  if (d.aliases) {
+    Object.keys(d.aliases).forEach(function (k) { if (!aliases[k]) aliases[k] = d.aliases[k]; });
+  }
+  if (d.mortgage && !mortgage && !rent && Array.isArray(d.mortgage.tracks)) { mortgage = d.mortgage; saveMortgage(); houseMode = 'mortgage'; applyRecurring(); renderHousing(); }
+  if (d.rent && d.rent.amount > 0 && !rent && !mortgage) { rent = d.rent; saveRent(); houseMode = 'rent'; applyRecurring(); renderHousing(); }
+  if (Array.isArray(d.recurring)) {
+    d.recurring.forEach(function (r) {
+      if (r && r.id && !recurring.some(function (x) { return x.id === r.id; })) recurring.push(r);
+    });
+    saveRecurring();
+    applyRecurring();
+    renderRecurring();
+  }
+  saveMerchants();
+  fillMerchants();
+  if (d.images) {
+    Object.keys(d.images).forEach(function (id) {
+      try { localStorage.setItem('img_' + id, d.images[id]); } catch (err) {}
+    });
+  }
+  save();
+  fillCategories();
+  backupMsg(t('bk_restored', { n: added }));
+}
+
+function restoreFromBox() { restoreFromText(document.getElementById('backupText').value); }
+
+function restoreFromFile() {
+  var f = document.getElementById('restoreFile').files[0];
+  if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function () { restoreFromText(rd.result); };
+  rd.readAsText(f);
+}
+
+function showReceipt(id) {
+  var data = null;
+  try { data = localStorage.getItem('img_' + id); } catch (err) {}
+  if (!data) { alert(t('img_missing')); return; }
+  document.getElementById('viewerImg').src = data;
+  document.getElementById('viewer').style.display = 'flex';
+}
+
+function closeReceipt() {
+  document.getElementById('viewer').style.display = 'none';
+  document.getElementById('viewerImg').src = '';
+}
+
+
+function markBackup() {
+  try { localStorage.setItem('lastBackup', String(Date.now())); } catch (err) {}
+  updateNag();
+}
+
+function updateNag() {
+  var last = 0;
+  try { last = parseInt(localStorage.getItem('lastBackup') || '0', 10) || 0; } catch (err) {}
+  var old = !last || (Date.now() - last) > 30 * 24 * 3600 * 1000;
+  document.getElementById('backupNag').style.display = (entries.length > 0 && old) ? 'block' : 'none';
+}
+
+function updateNet() {
+  document.getElementById('netStatus').innerText = navigator.onLine ? t('net_on') : t('net_off');
+}
+window.addEventListener('online', updateNet);
+window.addEventListener('offline', updateNet);
+
+function toast(html) {
+  var t = document.getElementById('toast');
+  t.innerHTML = html;
+  t.style.display = 'block';
+}
+
+
+// ================= recurring expenses and installments =================
+var recurring = [];
+try { recurring = JSON.parse(localStorage.getItem('recurring') || '[]') || []; } catch (e) { recurring = []; }
+function saveRecurring() { try { localStorage.setItem('recurring', JSON.stringify(recurring)); } catch (e) {} }
+function val(id) { return document.getElementById(id).value; }
+function monthIdx(key) { var q = key.split('-'); return +q[0] * 12 + (+q[1] - 1); }
+function keyFromIdx(i) { return Math.floor(i / 12) + '-' + ('0' + ((i % 12) + 1)).slice(-2); }
+function monthName(key) {
+  var q = key.split('-');
+  return new Date(+q[0], +q[1] - 1, 1).toLocaleDateString(LOCALES[lang], { month: 'long', year: 'numeric' });
+}
+
+function recDay(r, y, m) {
+  var last = new Date(y, m + 1, 0).getDate();
+  return Math.min(Math.max(parseInt(r.day, 10) || 1, 1), last);
+}
+
+function recStatus(r) {
+  var nowI = monthIdx(monthKey(Date.now())), startI = monthIdx(r.start);
+  var dueNow = new Date().getDate() >= recDay(r, Math.floor(nowI / 12), nowI % 12);
+  var made = r.paid + Math.max(0, nowI - startI) + (nowI >= startI && dueNow ? 1 : 0);
+  if (r.n > 0 && made > r.n) made = r.n;
+  var remaining = r.n > 0 ? r.n - made : Infinity;
+  return {
+    made: made, remaining: remaining,
+    finished: r.n > 0 && remaining <= 0,
+    notStarted: nowI < startI,
+    lastKey: r.n > 0 ? keyFromIdx(startI + (r.n - r.paid) - 1) : ''
+  };
+}
+
+// writes each due payment as a normal expense, on the 1st of its month
+function applyRecurring() {
+  var nowI = monthIdx(monthKey(Date.now())), changed = false;
+  var have = {}, recHave = {};
+  entries.forEach(function (e) { have[e.id] = 1; if (e.rec) recHave[e.rec + ':' + e.k] = 1; });
+  recurring.concat(mortItem() || [], rentItem() || []).forEach(function (r, ri) {
+    var startI = monthIdx(r.start);
+    for (var k = 0; startI + k <= nowI; k++) {
+      var pIdx = r.paid + k + 1;
+      if (r.n > 0 && pIdx > r.n) break;
+      if ((r.skip || []).indexOf(pIdx) !== -1) continue;
+      if (recHave[r.id + ':' + pIdx]) continue;
+      var yy = Math.floor((startI + k) / 12), mm = (startI + k) % 12;
+      var d = new Date(yy, mm, recDay(r, yy, mm), 0, 0, 0, 0);
+      if (d.getTime() > Date.now()) break;
+      var id = d.getTime() + ri + 1;
+      while (have[id]) id++;
+      have[id] = 1;
+      entries.push({ id: id, amount: r.amtAt ? r.amtAt(pIdx) : r.amount, category: r.cat,
+        note: r.name + (r.n > 0 ? ' (' + pIdx + '/' + r.n + ')' : ''),
+        type: 'expense', date: d.toLocaleDateString('he-IL'), rec: r.id, k: pIdx, auto: true });
+      changed = true;
+    }
+  });
+  if (changed) {
+    entries.sort(function (x, y) { return y.id - x.id; });
+    try { localStorage.setItem('entries', JSON.stringify(entries)); } catch (e) {}
+  }
+  return changed;
+}
+
+function monthlyStats() {
+  var nowKey = monthKey(Date.now()), byM = {};
+  entries.forEach(function (e) {
+    var k = entryMonth(e), o = byM[k] || (byM[k] = { inc: 0, exp: 0 });
+    if (e.type === 'income') o.inc += e.amount; else if (!e.rec) o.exp += e.amount;
+  });
+  var keys = Object.keys(byM).filter(function (k) { return k < nowKey; }).sort().reverse().slice(0, 3);
+  if (!keys.length && byM[nowKey]) keys = [nowKey];
+  var inc = 0, exp = 0;
+  keys.forEach(function (k) { inc += byM[k].inc; exp += byM[k].exp; });
+  return { inc: keys.length ? inc / keys.length : 0, exp: keys.length ? exp / keys.length : 0, months: keys.length };
+}
+
+function activeFixed() {
+  return recurring.reduce(function (sum, r) { return sum + (recStatus(r).finished ? 0 : r.amount); }, 0) + (mortgage ? mortActiveAmount() : 0) + (rent ? rentActiveAmount() : 0);
+}
+
+function saveIncomeField() { try { localStorage.setItem('monthlyIncome', val('recIncome')); } catch (e) {} }
+
+function fillRecCats() {
+  var sel = document.getElementById('recCat');
+  var keep = sel.value;
+  sel.innerHTML = cats.expense.map(function (c) {
+    return '<option value="' + esc(c) + '">' + esc(catLabel(c)) + '</option>';
+  }).join('') + '<option value="' + NEW_OPT + '">' + esc(t('new_cat_opt')) + '</option>';
+  if (keep && (keep === NEW_OPT || cats.expense.indexOf(keep) !== -1)) sel.value = keep;
+  onRecCatChange();
+  buildPicker('recCat');
+}
+
+function onRecCatChange() {
+  document.getElementById('recNewCat').style.display = val('recCat') === NEW_OPT ? 'block' : 'none';
+}
+
+function addCategory(type, name) {
+  if (cats[type].indexOf(name) === -1) {
+    cats[type].splice(Math.max(cats[type].length - 1, 0), 0, name);
+    try { localStorage.setItem('cats', JSON.stringify(cats)); } catch (e) {}
+  }
+}
+
+function toggleRecForm() {
+  var f = document.getElementById('recForm');
+  var open = f.style.display === 'none';
+  f.style.display = open ? 'block' : 'none';
+  document.getElementById('recToggle').style.display = open ? 'none' : 'block';
+  if (open) {
+    document.getElementById('recStart').value = monthKey(Date.now());
+    var saved = '';
+    try { saved = localStorage.getItem('monthlyIncome') || ''; } catch (e) {}
+    var st = monthlyStats();
+    document.getElementById('recIncome').value = saved || (st.inc > 0 ? Math.round(st.inc) : '');
+    fillRecCats();
+    updateRecPreview();
+  }
+}
+
+function updateRecPreview() {
+  var box = document.getElementById('recPreview');
+  var a = parseFloat(val('recAmount')), n = parseInt(val('recN'), 10) || 0;
+  var paid = parseInt(val('recPaid'), 10) || 0, cash = parseFloat(val('recCash')) || 0;
+  var inc = parseFloat(val('recIncome')) || 0;
+  if (!(a > 0)) { box.innerHTML = '<span class="muted">' + esc(t('pv_hint')) + '</span>'; return; }
+  if (n > 0 && paid >= n) paid = n - 1;
+  var dayN = Math.min(Math.max(parseInt(val('recDay'), 10) || 1, 1), 31);
+  var out = ['<b>' + esc(t('pv_monthly', { amt: fmt(a) })) + '</b>', esc(t('pv_day', { d: dayN }))];
+  if (n > 0) {
+    var rem = n - paid;
+    out.push(esc(t('pv_count', { n: n }) + (paid ? ' · ' + t('pv_paid_left', { p: paid, r: rem }) : '')));
+    out.push('<b>' + esc(t('pv_total', { amt: fmt(a * n) })) + '</b>');
+    if (paid) out.push(esc(t('pv_left', { amt: fmt(a * rem) })));
+    var startKey = val('recStart') || monthKey(Date.now());
+    out.push(esc(t('pv_last', { month: monthName(keyFromIdx(monthIdx(startKey) + rem - 1)) })));
+    if (cash > 0) {
+      var diff = a * n - cash, pct = Math.round(diff / cash * 100);
+      out.push(esc(diff > 0.005
+        ? t('pv_cash_more', { cash: fmt(cash), diff: fmt(diff), pct: pct })
+        : t('pv_cash_same', { cash: fmt(cash) })));
+    }
+  } else {
+    out.push(esc(t('pv_year', { amt: fmt(a * 12) })));
+  }
+
+  var chk = '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>' + esc(t('pv_check_title')) + '</b><br>';
+  if (inc <= 0) {
+    chk += '<span class="muted">' + esc(t('pv_no_income')) + '</span>';
+  } else {
+    var st = monthlyStats(), fix = activeFixed();
+    var free = inc - st.exp - fix - a;
+    var share = Math.round((fix + a) / inc * 100);
+    var line, cls = '';
+    if (free < 0) { line = t('pv_neg', { amt: fmt(-free) }); cls = 'neg'; }
+    else if (share > 50) { line = t('pv_bad', { pct: share }); cls = 'neg'; }
+    else if (share > 30) { line = t('pv_warn', { pct: share }); }
+    else { line = t('pv_ok', { pct: share }); cls = 'pos'; }
+    chk += '<b class="' + cls + '"' + (cls ? '' : ' style="color:#d97706"') + '>' + esc(line) + '</b><br>' +
+      '<span class="muted" style="font-size:14px">' + esc(t('pv_breakdown', {
+        inc: fmt(inc), exp: fmt(st.exp), fix: fmt(fix), new: fmt(a), left: fmt(free) })) + '</span>';
+    if (!st.months) chk += '<br><span class="muted" style="font-size:14px">' + esc(t('pv_no_history')) + '</span>';
+  }
+  chk += '<br><span class="muted" style="font-size:13px">' + esc(t('pv_disclaimer')) + '</span></div>';
+  box.innerHTML = out.join('<br>') + chk;
+}
+
+function saveRecurringForm() {
+  var name = val('recName').trim();
+  var a = parseFloat(val('recAmount')), n = parseInt(val('recN'), 10) || 0, paid = parseInt(val('recPaid'), 10) || 0;
+  if (!name) { alert(t('rec_err_name')); return; }
+  if (!(a > 0)) { alert(t('rec_err_amount')); return; }
+  if (n > 0 && paid >= n) { alert(t('rec_err_paid')); return; }
+  var recCategory = val('recCat') || 'אחר';
+  if (recCategory === NEW_OPT) {
+    recCategory = val('recNewCat').trim();
+    if (!recCategory) { alert(t('err_catname')); return; }
+    addCategory('expense', recCategory);
+  }
+  if (n <= 0) paid = 0;
+  var r = { id: Date.now(), name: name.slice(0, 40), cat: recCategory, amount: a, n: n, paid: paid,
+            start: val('recStart') || monthKey(Date.now()), day: Math.min(Math.max(parseInt(val('recDay'), 10) || 1, 1), 31), cash: parseFloat(val('recCash')) || 0, skip: [] };
+  recurring.push(r);
+  saveRecurring();
+  applyRecurring();
+  ['recName', 'recAmount', 'recN', 'recPaid', 'recCash', 'recDay', 'recNewCat'].forEach(function (id) { document.getElementById(id).value = ''; });
+  fillCategories();
+  fillRecCats();
+  document.getElementById('recCat').value = recCategory;
+  onRecCatChange();
+  buildPicker('recCat');
+  toggleRecForm();
+  render();
+  renderRecurring();
+  toast(esc(t('rec_saved', { name: r.name, amt: fmt(a) })));
+}
+
+function deleteRecurring(id) {
+  var r = recurring.filter(function (x) { return x.id === id; })[0];
+  if (!r || !confirm(t('rec_stop_confirm', { name: r.name }))) return;
+  recurring = recurring.filter(function (x) { return x.id !== id; });
+  saveRecurring();
+  renderRecurring();
+}
+
+function renderRecurring() {
+  var box = document.getElementById('recList');
+  if (!recurring.length) { box.innerHTML = ''; return; }
+  var html = recurring.map(function (r) {
+    var s2 = recStatus(r), info, sp = r.start.split('-');
+    var dayTxt = t('rec_on_day', { d: recDay(r, +sp[0], +sp[1] - 1) });
+    if (s2.finished) info = t('rec_finished');
+    else if (s2.made === r.paid) info = t('rec_first_on', { date: new Date(+sp[0], +sp[1] - 1, recDay(r, +sp[0], +sp[1] - 1)).toLocaleDateString(LOCALES[lang]) });
+    else if (r.n > 0) info = dayTxt + ' · ' + t('rec_progress', { p: s2.made, n: r.n }) + ' · ' +
+      t('rec_left_total', { amt: fmt(r.amount * s2.remaining) }) + ' · ' + t('rec_ends', { month: monthName(s2.lastKey) });
+    else info = dayTxt + ' · ' + t('rec_ongoing');
+    return '<div class="row"><span><b>' + esc(r.name) + '</b> · ' + esc(catLabel(r.cat)) +
+      '<br><span class="muted" style="font-size:14px">' + esc(info) + '</span></span>' +
+      '<span><b class="neg">' + esc(fmt(r.amount)) + '</b>' +
+      '<button class="del" onclick="deleteRecurring(' + r.id + ')">' + esc(t('rec_stop')) + '</button></span></div>';
+  }).join('');
+  html += '<div class="sum"><span class="muted">' + esc(t('rec_total_month')) + '</span><b class="neg">' + esc(fmt(activeFixed())) + '</b></div>';
+  box.innerHTML = html + '<div style="height:8px"></div>';
+}
+
+// ---- mortgage ----
+var MORT_CAT = 'משכנתא';
+var mortgage = null;
+try { mortgage = JSON.parse(localStorage.getItem('mortgage') || 'null'); } catch (e) { mortgage = null; }
+if (mortgage && !Array.isArray(mortgage.tracks)) mortgage = null;
+function saveMortgage() { try { if (mortgage) localStorage.setItem('mortgage', JSON.stringify(mortgage)); else localStorage.removeItem('mortgage'); } catch (e) {} }
+var mortOpen = false, mortEditing = false, mortDraft = [], mortExtra = '';
+var MORT_TYPES = ['p', 'fu', 'fl', 'v', 'o'];
+
+function trackPmt(tr) {
+  var n = tr.years * 12, r = tr.rate / 1200;
+  return r > 0 ? tr.amount * r / (1 - Math.pow(1 + r, -n)) : tr.amount / n;
+}
+function trackBal(tr, k) {
+  var n = tr.years * 12;
+  if (k >= n) return 0;
+  if (k <= 0) return tr.amount;
+  var r = tr.rate / 1200, p = trackPmt(tr);
+  return r > 0 ? tr.amount * Math.pow(1 + r, k) - p * (Math.pow(1 + r, k) - 1) / r : tr.amount - p * k;
+}
+function mortAmountAt(pIdx) {
+  var s = 0;
+  mortgage.tracks.forEach(function (tr) { if (pIdx <= tr.years * 12) s += trackPmt(tr); });
+  return Math.round(s * 100) / 100;
+}
+function mortN() { return Math.max.apply(null, mortgage.tracks.map(function (tr) { return tr.years * 12; })); }
+function mortItem() {
+  if (!mortgage || !mortgage.tracks.length) return null;
+  return { id: 'mortgage', name: t('mort_name'), cat: MORT_CAT, n: mortN(), paid: mortgage.paid, start: mortgage.from,
+    day: mortgage.day, skip: mortgage.skip || [], amtAt: mortAmountAt, amount: mortAmountAt(mortgage.paid + 1) };
+}
+function mortMade() { var it = mortItem(); return it ? recStatus(it).made : 0; }
+function mortActiveAmount() {
+  var it = mortItem();
+  if (!it) return 0;
+  var s = recStatus(it);
+  return s.finished ? 0 : mortAmountAt(s.made + 1);
+}
+
+// months left and total interest from now, optionally with an extra monthly payment
+function mortSim(extra) {
+  var k = mortMade(), bs = mortgage.tracks.map(function (tr) { return trackBal(tr, k); });
+  var months = 0, interest = 0;
+  while (months < 1200 && bs.some(function (b) { return b > 0.5; })) {
+    mortgage.tracks.forEach(function (tr, i) {
+      if (bs[i] <= 0.5) { bs[i] = 0; return; }
+      var ir = bs[i] * tr.rate / 1200, pay = Math.min(trackPmt(tr), bs[i] + ir);
+      interest += ir; bs[i] = bs[i] + ir - pay;
+    });
+    var left = extra, best = -1;
+    mortgage.tracks.forEach(function (tr, i) { if (bs[i] > 0.5 && (best < 0 || tr.rate > mortgage.tracks[best].rate)) best = i; });
+    while (left > 0 && best >= 0) {
+      var d = Math.min(left, bs[best]); bs[best] -= d; left -= d;
+      best = -1;
+      mortgage.tracks.forEach(function (tr, i) { if (bs[i] > 0.5 && (best < 0 || tr.rate > mortgage.tracks[best].rate)) best = i; });
+    }
+    months++;
+  }
+  return { months: months, interest: interest };
+}
+
+function mortSync() {
+  Array.prototype.forEach.call(document.querySelectorAll('#mortTracks .mt'), function (row, i) {
+    if (!mortDraft[i]) return;
+    mortDraft[i].type = row.querySelector('.mt-type').value;
+    mortDraft[i].amount = row.querySelector('.mt-amount').value;
+    mortDraft[i].rate = row.querySelector('.mt-rate').value;
+    mortDraft[i].years = row.querySelector('.mt-years').value;
+  });
+}
+function mortEdit() {
+  mortEditing = true;
+  mortDraft = mortgage ? mortgage.tracks.map(function (tr) { return { type: tr.type, amount: tr.amount, rate: tr.rate, years: tr.years }; })
+    : [{ type: 'p', amount: '', rate: '', years: '' }];
+  renderMortgage();
+}
+function mortAddTrack() { mortSync(); mortDraft.push({ type: 'fu', amount: '', rate: '', years: '' }); renderMortgage(); }
+function mortRemoveTrack(i) { mortSync(); mortDraft.splice(i, 1); renderMortgage(); }
+function mortCancel() { mortEditing = false; renderMortgage(); }
+function mortToggle() { mortOpen = !mortOpen; renderMortgage(); }
+function mortExtraChange(v) { mortExtra = v; renderMortgage(); var el = document.getElementById('mortExtra'); if (el) { el.focus(); try { el.setSelectionRange(v.length, v.length); } catch (e) {} } }
+
+function mortSave() {
+  mortSync();
+  var tracks = [];
+  for (var i = 0; i < mortDraft.length; i++) {
+    var d = mortDraft[i], a = parseFloat(d.amount), r = parseFloat(d.rate), y = parseFloat(d.years);
+    if (!(a > 0) || !(r >= 0 && r <= 30) || !(y >= 1 && y <= 40)) { alert(t('mort_err_track', { n: i + 1 })); return; }
+    tracks.push({ type: d.type, amount: a, rate: r, years: Math.round(y) });
+  }
+  var start = val('mortStart'), day = parseInt(val('mortDay'), 10);
+  if (!start) { alert(t('mort_err_start')); return; }
+  if (!(day >= 1 && day <= 31)) { alert(t('mort_err_day')); return; }
+  if (rent && !confirm(t('house_replace_r'))) return;
+  if (rent) { rent = null; saveRent(); }
+  var nowKey = monthKey(Date.now());
+  var from = start > nowKey ? start : nowKey;
+  var paid = Math.max(0, monthIdx(from) - monthIdx(start));
+  mortgage = { tracks: tracks, start: start, day: day, from: from, paid: paid, skip: mortgage ? (mortgage.skip || []) : [] };
+  saveMortgage();
+  mortEditing = false;
+  applyRecurring();
+  render();
+  renderRecurring();
+  renderHousing();
+}
+function mortDelete() {
+  if (!confirm(t('mort_del_confirm'))) return;
+  mortgage = null; saveMortgage(); mortEditing = false; mortOpen = false;
+  renderRecurring(); renderHousing();
+}
+
+function renderMortgage() {
+  var box = document.getElementById('mortBody');
+  if (!box) return;
+  var h = '', typeLbl = function (k) { return t('mt_' + k); };
+  if (mortEditing) {
+    h += '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">🏠 ' + esc(t('mort_title')) + '</b></div>';
+    h += '<div class="muted" style="font-size:14px;margin:4px 0 8px">' + esc(t('mort_form_desc')) + '</div><div id="mortTracks">';
+    mortDraft.forEach(function (d, i) {
+      h += '<div class="mt" style="background:var(--bg);border-radius:10px;padding:10px;margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center"><b>' + esc(t('mort_track_n', { n: i + 1 })) + '</b>' +
+        (mortDraft.length > 1 ? '<button class="del" onclick="mortRemoveTrack(' + i + ')">' + esc(t('mort_remove')) + '</button>' : '') + '</div>' +
+        '<select class="mt-type">' + MORT_TYPES.map(function (k) { return '<option value="' + k + '"' + (d.type === k ? ' selected' : '') + '>' + esc(typeLbl(k)) + '</option>'; }).join('') + '</select>' +
+        '<input class="mt-amount" type="number" inputmode="decimal" value="' + esc(d.amount) + '" placeholder="' + esc(t('mort_amount_ph')) + '">' +
+        '<input class="mt-rate" type="number" inputmode="decimal" step="0.01" value="' + esc(d.rate) + '" placeholder="' + esc(t('mort_rate_ph')) + '">' +
+        '<input class="mt-years" type="number" inputmode="numeric" value="' + esc(d.years) + '" placeholder="' + esc(t('mort_years_ph')) + '"></div>';
+    });
+    h += '</div><button onclick="mortAddTrack()" style="background:var(--chip);color:var(--text)">' + esc(t('mort_add_track')) + '</button>';
+    h += '<div class="muted" style="font-size:14px;margin-top:8px">' + esc(t('mort_start_lbl')) + '</div>' +
+      '<input type="month" id="mortStart" value="' + esc(mortgage ? mortgage.start : monthKey(Date.now())) + '">' +
+      '<input type="number" id="mortDay" inputmode="numeric" min="1" max="31" value="' + esc(mortgage ? mortgage.day : '') + '" placeholder="' + esc(t('mort_day_ph')) + '">';
+    h += '<button onclick="mortSave()">' + esc(t('mort_save')) + '</button>' +
+      '<button onclick="mortCancel()" style="background:var(--chip);color:var(--text)">' + esc(t('viewer_close')) + '</button>';
+    if (mortgage) h += '<button class="del" style="margin-top:8px" onclick="mortDelete()">' + esc(t('mort_delete')) + '</button>';
+    box.innerHTML = h; return;
+  }
+  if (!mortgage) {
+    box.innerHTML = '<button onclick="mortEdit()" style="font-size:17px">🏠 ' + esc(t('mort_title')) + '</button>' +
+      '<div class="muted" style="text-align:center;font-size:14px;margin-top:8px">' + esc(t('mort_hint')) + '</div>';
+    return;
+  }
+  var it = mortItem(), st = recStatus(it), k = st.made, n = mortN();
+  var total0 = 0, bal = 0, pmtNow = 0, intNow = 0, intAll = 0;
+  mortgage.tracks.forEach(function (tr) {
+    total0 += tr.amount; bal += trackBal(tr, k);
+    intAll += trackPmt(tr) * tr.years * 12 - tr.amount;
+    var kk = Math.min(Math.max(k, 1), tr.years * 12);
+    if (k < tr.years * 12) { pmtNow += trackPmt(tr); intNow += trackBal(tr, kk - 1) * tr.rate / 1200; }
+  });
+  var pct = total0 > 0 ? Math.round((1 - bal / total0) * 100) : 0;
+  pct = Math.max(0, Math.min(100, pct));
+  var payNow = st.finished ? 0 : mortAmountAt(k + 1);
+  h += '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">🏠 ' + esc(t('mort_title')) + '</b>' +
+    '<button class="del" onclick="mortEdit()">' + esc(t('mort_edit')) + '</button></div>';
+  h += '<div style="font-size:26px;font-weight:bold;margin:6px 0">' + esc(fmt(Math.round(payNow))) + ' <span class="muted" style="font-weight:normal;font-size:13px">' + esc(t('mort_per_month', { d: mortgage.day })) + '</span></div>';
+  h += '<div style="height:12px;background:var(--chip);border-radius:8px;overflow:hidden;margin:8px 0 4px"><i style="display:block;height:100%;width:' + pct + '%;background:var(--green)"></i></div>';
+  h += '<div class="muted" style="font-size:13px">' + esc(t('mort_left', { amt: fmt(Math.round(bal)), p: pct })) + '</div>';
+  if (mortOpen) {
+    var lastKey = keyFromIdx(monthIdx(mortgage.from) + (n - mortgage.paid) - 1);
+    h += '<div style="margin-top:10px">';
+    var rows = [[t('mort_interest'), fmt(Math.round(intNow))], [t('mort_principal'), fmt(Math.round(Math.max(0, pmtNow - intNow)))],
+      [t('mort_progress'), t('mort_progress_v', { m: Math.min(k, n), n: n })], [t('mort_total_int'), fmt(Math.round(intAll))], [t('mort_end'), monthName(lastKey)]];
+    rows.forEach(function (r) { h += '<div class="row"><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>'; });
+    h += '</div>';
+    mortgage.tracks.forEach(function (tr) {
+      h += '<div style="background:var(--bg);border-radius:10px;padding:10px;margin-top:8px;font-size:14px"><b>' + esc(typeLbl(tr.type)) + '</b> · ' + esc(fmt(tr.amount)) +
+        '<br><span class="muted" style="font-size:13px">' + esc(t('mort_track_info', { r: tr.rate, y: tr.years, p: fmt(Math.round(trackPmt(tr))) })) + '</span></div>';
+    });
+    h += '<div style="margin-top:10px"><div class="muted" style="font-size:14px">' + esc(t('mort_whatif')) + '</div>' +
+      '<input type="number" id="mortExtra" inputmode="decimal" value="' + esc(mortExtra) + '" placeholder="' + esc(t('mort_extra_ph')) + '" oninput="mortExtraChange(this.value)">';
+    var ex = parseFloat(mortExtra);
+    if (ex > 0 && !st.finished) {
+      var a0 = mortSim(0), a1 = mortSim(ex), saved = Math.round(a0.interest - a1.interest), ms = a0.months - a1.months;
+      var endKey = keyFromIdx(monthIdx(monthKey(Date.now())) + a1.months);
+      h += '<div style="background:#dcfce7;color:#166534;border-radius:10px;padding:10px;font-size:14px">' + esc(t('mort_whatif_res', { amt: fmt(saved), m: ms, end: monthName(endKey) })) + '</div>';
+    }
+    h += '</div><div class="muted" style="font-size:12px;margin-top:10px">' + esc(t('mort_note')) + '</div>';
+  }
+  h += '<div onclick="mortToggle()" style="cursor:pointer;text-align:center;font-size:20px;color:var(--muted);padding-top:8px;border-top:1px solid var(--line);margin-top:10px" aria-label="' + esc(t('mort_toggle')) + '">' + (mortOpen ? '⌃' : '⌄') + '</div>';
+  box.innerHTML = h;
+}
+
+// ---- rent + housing section ----
+var RENT_CAT = 'שכירות';
+var rent = null;
+try { rent = JSON.parse(localStorage.getItem('rent') || 'null'); } catch (e) { rent = null; }
+if (rent && !(rent.amount > 0)) rent = null;
+function saveRent() { try { if (rent) localStorage.setItem('rent', JSON.stringify(rent)); else localStorage.removeItem('rent'); } catch (e) {} }
+var rentEditing = false;
+var houseOpen = false, houseMode = mortgage ? 'mortgage' : (rent ? 'rent' : null);
+
+function rentItem() {
+  if (!rent) return null;
+  return { id: 'rent', name: t('rent_name'), cat: RENT_CAT, amount: rent.amount, n: rent.months, paid: rent.paid,
+    start: rent.from, day: rent.day, skip: rent.skip || [] };
+}
+function rentActiveAmount() {
+  var it = rentItem();
+  return it && !recStatus(it).finished ? rent.amount : 0;
+}
+function houseToggle() { houseOpen = !houseOpen; renderHousing(); }
+function houseChoose(mode) {
+  houseMode = mode;
+  if (mode === 'mortgage' && !mortgage) { mortEditing = true; mortDraft = [{ type: 'p', amount: '', rate: '', years: '' }]; }
+  if (mode === 'rent' && !rent) rentEditing = true;
+  renderHousing();
+}
+function rentEdit() { rentEditing = true; renderHousing(); }
+function rentCancel() { rentEditing = false; renderHousing(); }
+function rentSave() {
+  var a = parseFloat(val('rentAmount')), mo = parseInt(val('rentMonths'), 10);
+  var start = val('rentStart') || monthKey(Date.now()), day = parseInt(val('rentDay'), 10) || 1;
+  if (!(a > 0)) { alert(t('rent_err_amount')); return; }
+  if (!(mo >= 1 && mo <= 360)) { alert(t('rent_err_months')); return; }
+  if (!(day >= 1 && day <= 31)) { alert(t('mort_err_day')); return; }
+  if (mortgage && !confirm(t('house_replace'))) return;
+  if (mortgage) { mortgage = null; saveMortgage(); mortEditing = false; }
+  var nowKey = monthKey(Date.now());
+  var from = start > nowKey ? start : nowKey;
+  var paid = Math.max(0, monthIdx(from) - monthIdx(start));
+  rent = { amount: a, months: mo, start: start, day: day, from: from, paid: paid, skip: rent ? (rent.skip || []) : [] };
+  saveRent();
+  rentEditing = false; houseMode = 'rent';
+  applyRecurring(); render(); renderRecurring(); renderHousing();
+}
+function rentDelete() {
+  if (!confirm(t('rent_del_confirm'))) return;
+  rent = null; saveRent(); rentEditing = false;
+  renderRecurring(); renderHousing();
+}
+
+function renderRent() {
+  var box = document.getElementById('rentBody');
+  if (!box) return;
+  var h = '';
+  if (rentEditing || !rent) {
+    h += '<input type="number" id="rentAmount" inputmode="decimal" value="' + esc(rent ? rent.amount : '') + '" placeholder="' + esc(t('rent_amount_ph')) + '">' +
+      '<input type="number" id="rentMonths" inputmode="numeric" value="' + esc(rent ? rent.months : '') + '" placeholder="' + esc(t('rent_months_ph')) + '">' +
+      '<details style="margin:4px 0 8px"' + (rent ? ' open' : '') + '><summary class="muted" style="font-size:14px">' + esc(t('rent_more')) + '</summary>' +
+      '<div class="muted" style="font-size:14px;margin-top:6px">' + esc(t('rent_start_lbl')) + '</div>' +
+      '<input type="month" id="rentStart" value="' + esc(rent ? rent.start : monthKey(Date.now())) + '">' +
+      '<input type="number" id="rentDay" inputmode="numeric" min="1" max="31" value="' + esc(rent ? rent.day : '') + '" placeholder="' + esc(t('rent_day_ph')) + '"></details>' +
+      '<button onclick="rentSave()">' + esc(t('mort_save')) + '</button>' +
+      (rent ? '<button onclick="rentCancel()" style="background:var(--chip);color:var(--text)">' + esc(t('viewer_close')) + '</button><button class="del" style="margin-top:8px" onclick="rentDelete()">' + esc(t('rent_delete')) + '</button>' : '');
+    box.innerHTML = h; return;
+  }
+  var it = rentItem(), st = recStatus(it), n = rent.months;
+  var total = rent.amount * n, leftPay = rent.amount * st.remaining;
+  var pct = Math.max(0, Math.min(100, Math.round(st.made / n * 100)));
+  h += '<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">' + esc(t('house_rent')) + '</b>' +
+    '<button class="del" onclick="rentEdit()">' + esc(t('mort_edit')) + '</button></div>';
+  h += '<div style="font-size:26px;font-weight:bold;margin:6px 0">' + esc(fmt(rent.amount)) + ' <span class="muted" style="font-weight:normal;font-size:13px">' + esc(t('mort_per_month', { d: rent.day })) + '</span></div>';
+  h += '<div style="height:12px;background:var(--chip);border-radius:8px;overflow:hidden;margin:8px 0 4px"><i style="display:block;height:100%;width:' + pct + '%;background:var(--green)"></i></div>';
+  h += '<div class="muted" style="font-size:13px;margin-bottom:8px">' + esc(st.finished ? t('rent_finished') : t('rent_progress', { m: st.made, n: n })) + '</div>';
+  [[t('rent_total'), fmt(total)], [t('rent_left_pay'), fmt(leftPay)], [t('rent_months_left'), String(st.remaining)], [t('mort_end'), monthName(st.lastKey)]].forEach(function (r) {
+    h += '<div class="row"><span>' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b></div>';
+  });
+  box.innerHTML = h;
+}
+
+function renderHousing() {
+  var box = document.getElementById('mortBox');
+  if (!box) return;
+  var sum = t('house_hint');
+  if (houseMode === 'mortgage' && mortgage) sum = t('house_sum_mort', { amt: fmt(Math.round(mortActiveAmount())) });
+  else if (houseMode === 'rent' && rent) sum = t('house_sum_rent', { amt: fmt(rent.amount), n: recStatus(rentItem()).remaining });
+  var h = '<div onclick="houseToggle()" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b style="font-size:17px">🏠 ' +
+    esc(t('house_title')) + '</b><br><span class="muted" style="font-size:13px">' + esc(sum) + '</span></span><span style="font-size:20px;color:var(--muted)">' + (houseOpen ? '⌃' : '⌄') + '</span></div>';
+  if (houseOpen) {
+    var on = 'flex:1;margin:0', off = 'flex:1;margin:0;background:var(--chip);color:var(--text)';
+    h += '<div style="display:flex;gap:8px;margin:12px 0"><button onclick="houseChoose(\'mortgage\')" style="' + (houseMode === 'mortgage' ? on : off) + '">' + esc(t('house_mort')) + '</button>' +
+      '<button onclick="houseChoose(\'rent\')" style="' + (houseMode === 'rent' ? on : off) + '">' + esc(t('house_rent')) + '</button></div>' +
+      '<div id="mortBody"></div><div id="rentBody"></div>';
+  }
+  box.innerHTML = h;
+  if (houseOpen) { if (houseMode === 'mortgage') renderMortgage(); else if (houseMode === 'rent') renderRent(); }
+}
+
+// ---- pages (swipe) ----
+var pageIdx = 1, pageScroll = [0, 0, 0, 0];
+var PAGES = ['pagePay', 'pageMain', 'pageCal', 'pageShare'], PTABS = ['pgPay', 'pgMain', 'pgCal', 'pgShare'];
+function showPage(i) {
+  if (i === pageIdx || i < 0 || i >= PAGES.length) return;
+  pageScroll[pageIdx] = window.pageYOffset || 0;
+  var from = document.getElementById(PAGES[pageIdx]), to = document.getElementById(PAGES[i]);
+  from.style.display = 'none'; to.style.display = 'block';
+  var forward = i > pageIdx;
+  pageIdx = i;
+  PTABS.forEach(function (id, k) { document.getElementById(id).classList.toggle('active', k === i); });
+  window.scrollTo(0, pageScroll[i] || 0);
+  var rtl = document.documentElement.dir === 'rtl', dx = (forward === rtl) ? -40 : 40;
+  try { to.animate([{ transform: 'translateX(' + dx + 'px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'ease-out' }); } catch (e) {}
+  if (i === 0) renderPayHist();
+  if (i === 2) renderCal();
+  if (i === 3) renderSharePreview();
+}
+(function () {
+  var x0 = 0, y0 = 0, ok = false;
+  document.addEventListener('touchstart', function (ev) {
+    var tt = ev.touches[0];
+    x0 = tt.clientX; y0 = tt.clientY;
+    ok = ev.touches.length === 1 && !(ev.target.closest && ev.target.closest('input,textarea,select,.pk-list,#viewer,pre'));
+  }, { passive: true });
+  document.addEventListener('touchend', function (ev) {
+    if (!ok) return;
+    ok = false;
+    var tt = ev.changedTouches[0], dx = tt.clientX - x0, dy = tt.clientY - y0;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    var rtl = document.documentElement.dir === 'rtl';
+    var next = rtl ? dx > 0 : dx < 0;
+    showPage(pageIdx + (next ? 1 : -1));
+  }, { passive: true });
+})();
+
+// ---- share summary ----
+function fillShareMonths() {
+  var sel = document.getElementById('shareMonths'), keep = sel.value;
+  if (!keep) { try { keep = localStorage.getItem('shareMonths') || '1'; } catch (e) { keep = '1'; } }
+  sel.innerHTML = [1, 2, 3, 6, 12].map(function (n) {
+    return '<option value="' + n + '">' + esc(n === 1 ? t('share_n1') : t('share_nn', { n: n })) + '</option>';
+  }).join('');
+  sel.value = keep;
+  renderSharePreview();
+}
+function renderSharePreview() {
+  var el = document.getElementById('sharePreview');
+  if (el) el.innerText = buildShareText(parseInt(val('shareMonths'), 10) || 1) || t('share_empty');
+}
+function saveShareMonths() { try { localStorage.setItem('shareMonths', val('shareMonths')); } catch (e) {} }
+function buildShareText(n) {
+  var nowI = monthIdx(monthKey(Date.now())), parts = [];
+  for (var i = 0; i < n; i++) {
+    var key = keyFromIdx(nowI - i), inc = 0, exp = 0, carry = 0, byCat = {}, any = false;
+    entries.forEach(function (e) {
+      var k = entryMonth(e), v = e.type === 'income' ? e.amount : -e.amount;
+      if (k < key) carry += v;
+      else if (k === key) {
+        any = true;
+        if (e.type === 'income') inc += e.amount; else { exp += e.amount; byCat[e.category] = (byCat[e.category] || 0) + e.amount; }
+      }
+    });
+    if (!any) continue;
+    var cl = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; });
+    var lines = [t('msg_title', { month: monthName(key) }), t('msg_inc', { amt: fmt(inc) }), t('msg_exp', { amt: fmt(exp) }), t('msg_bal', { amt: fmt(carry + inc - exp) })];
+    if (cl.length) {
+      lines.push('', t('msg_cats'));
+      cl.slice(0, 8).forEach(function (c) { lines.push(catLabel(c) + ' · ' + fmt(byCat[c])); });
+      if (cl.length > 8) lines.push(t('msg_more', { n: cl.length - 8 }));
+    }
+    parts.push(lines.join('\n'));
+  }
+  return parts.length ? parts.join('\n\n').concat('\n\n' + t('msg_foot')) : '';
+}
+function shareWhatsApp() {
+  var text = buildShareText(parseInt(val('shareMonths'), 10) || 1);
+  if (!text) { alert(t('share_empty')); return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+// ---- android app: reading notifications ----
+function looksLikePayment(text) {
+  var tx = String(text || '');
+  if (/קוד אימות|סיסמה חד|OTP|verification code|one-time/i.test(tx)) return false;
+  var money = /₪|ש"ח|ש״ח|שח|NIS|ILS|\$|€|£|USD|EUR/i.test(tx);
+  var kw = /חיוב|חויב|עסקה|רכישה|תשלום|שולם|בוצע|זיכוי|החזר|משיכה|payment|paid|purchase|charged|transaction|spent|refund/i.test(tx);
+  return money && kw;
+}
+function androidProcess() {
+  if (!window.AndroidBridge || !AndroidBridge.drain) return;
+  var arr = [];
+  try { arr = JSON.parse(AndroidBridge.drain() || '[]'); } catch (e) { arr = []; }
+  arr.forEach(function (it) { if (it && looksLikePayment(it.t)) quickAdd(it.t, false, it.w); });
+}
+window.androidPing = androidProcess;
+function androidStatus() {
+  var box = document.getElementById('androidBox');
+  if (!box || !window.AndroidBridge) return;
+  box.style.display = 'block';
+  var on = false;
+  try { on = AndroidBridge.isListenerEnabled(); } catch (e) {}
+  var el = document.getElementById('androidStatus');
+  el.innerText = on ? t('and_on') : t('and_off');
+  el.style.color = on ? 'var(--green)' : 'var(--red)';
+}
+function androidInit() { androidStatus(); androidProcess(); }
+document.addEventListener('visibilitychange', function () { if (!document.hidden) androidInit(); });
+
+// ---- calendar ----
+var calMonth = '', calSel = '';
+function dayKeyOf(e) { var d = new Date(e.id || Date.now()); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function calMove(n) { calMonth = keyFromIdx(monthIdx(calMonth) + n); calSel = ''; renderCal(); }
+function calPick(k) { calSel = k; renderCal(); }
+function calShort(v) { v = Math.round(v); return v >= 10000 ? (v >= 100000 ? Math.round(v / 1000) : (v / 1000).toFixed(1).replace(/\.0$/, '')) + 'K' : String(v); }
+function renderCal() {
+  var grid = document.getElementById('calGrid');
+  if (!grid) return;
+  var today = dayKeyOf({ id: Date.now() });
+  if (!calMonth) calMonth = monthKey(Date.now());
+  var q = calMonth.split('-'), y = +q[0], mo = +q[1] - 1;
+  var exp = {}, inc = {}, byDay = {};
+  entries.forEach(function (e) {
+    var k = dayKeyOf(e);
+    if (k.slice(0, 7) !== calMonth) return;
+    (byDay[k] = byDay[k] || []).push(e);
+    if (e.type === 'income') inc[k] = (inc[k] || 0) + e.amount; else exp[k] = (exp[k] || 0) + e.amount;
+  });
+  var max = 0, total = 0;
+  Object.keys(exp).forEach(function (k) { total += exp[k]; if (exp[k] > max) max = exp[k]; });
+  if (!calSel || calSel.slice(0, 7) !== calMonth) calSel = (today.slice(0, 7) === calMonth) ? today : calMonth + '-01';
+  var mondayFirst = (lang === 'en' || lang === 'ru'), first = new Date(y, mo, 1).getDay();
+  var offset = mondayFirst ? (first + 6) % 7 : first, days = new Date(y, mo + 1, 0).getDate();
+  var h = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center">';
+  for (var w = 0; w < 7; w++) {
+    var wd = new Date(2023, 0, 1 + (mondayFirst ? w + 1 : w));
+    h += '<div class="muted" style="font-size:12px">' + esc(wd.toLocaleDateString(LOCALES[lang], { weekday: 'narrow' })) + '</div>';
+  }
+  for (var i = 0; i < offset; i++) h += '<div></div>';
+  for (var d = 1; d <= days; d++) {
+    var k = calMonth + '-' + ('0' + d).slice(-2), v = exp[k] || 0;
+    var alpha = max > 0 && v > 0 ? (0.12 + 0.5 * v / max).toFixed(2) : 0;
+    var st = 'border-radius:8px;padding:4px 0;min-height:44px;cursor:pointer;border:2px solid ' + (k === calSel ? 'var(--blue)' : (k === today ? 'var(--muted)' : 'transparent')) +
+      ';background:' + (alpha ? 'rgba(220,38,38,' + alpha + ')' : 'var(--bg)');
+    h += '<div onclick="calPick(\'' + k + '\')" style="' + st + '"><div style="font-size:14px">' + d + '</div>' +
+      '<div style="font-size:10px;line-height:1.2;min-height:12px">' + (v ? esc(calShort(v)) : '') + '</div></div>';
+  }
+  h += '</div><div style="height:10px"></div>';
+  grid.innerHTML = h;
+  document.getElementById('calTitle').innerText = monthName(calMonth);
+  document.getElementById('calMonthTotal').innerText = fmt(total);
+  var sel = byDay[calSel] || [], se = sel.filter(function (e) { return e.type !== 'income'; }), si = sel.filter(function (e) { return e.type === 'income'; });
+  var sp = calSel.split('-'), dateTxt = new Date(+sp[0], +sp[1] - 1, +sp[2]).toLocaleDateString(LOCALES[lang], { weekday: 'long', day: 'numeric', month: 'long' });
+  var dh = '<b>' + esc(dateTxt) + '</b><div class="sum"><span class="muted">' + esc(t('cal_day_total')) + '</span><b class="neg" style="font-size:20px">' + esc(fmt(exp[calSel] || 0)) + '</b></div>';
+  if (!se.length) dh += '<div class="muted" style="margin-top:8px">' + esc(t('cal_none')) + '</div>';
+  se.sort(function (a, b) { return b.id - a.id; }).forEach(function (e) {
+    dh += '<div class="row"><span>' + esc(catLabel(e.category)) + (e.note ? '<br><span class="muted" style="font-size:14px">' + esc(e.note) + '</span>' : '') +
+      '</span><b class="neg">' + esc(fmt(e.amount)) + '</b></div>';
+  });
+  if (si.length) {
+    dh += '<div class="sum"><span class="muted">' + esc(t('cal_income')) + '</span><b class="pos">' + esc(fmt(inc[calSel])) + '</b></div>';
+  }
+  document.getElementById('calDetail').innerHTML = dh;
+}
+
+// ---- payslip ----
+var payImg = null, payRaw = '';
+var HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+var EN_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+function payNumbers(line) {
+  var out = [], re = /\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?/g, m;
+  while ((m = re.exec(line)) !== null) {
+    var before = line.charAt(m.index - 1), after = line.charAt(m.index + m[0].length);
+    if (/[\/:%]/.test(after) || /[\/:]/.test(before)) continue;
+    var v = parseFloat(m[0].replace(/,/g, ''));
+    if (v >= 300 && v <= 1000000) out.push(v);
+  }
+  return out;
+}
+function payPick(lines, strong, weak, exclude) {
+  var best = null, bestScore = 0, votes = {};
+  lines.forEach(function (ln) {
+    if (exclude && exclude.test(ln)) return;
+    var sc = strong.test(ln) ? 3 : (weak && weak.test(ln) ? 2 : 0);
+    if (!sc) return;
+    var nums = payNumbers(ln);
+    if (!nums.length) return;
+    var v = Math.max.apply(null, nums), key = sc + ':' + v;
+    votes[key] = (votes[key] || 0) + 1;
+  });
+  Object.keys(votes).forEach(function (k) {
+    var p = k.split(':'), score = +p[0] * 10 + votes[k];
+    if (score > bestScore || (score === bestScore && +p[1] > best)) { bestScore = score; best = +p[1]; }
+  });
+  return best;
+}
+function parsePayslip(text) {
+  var lines = String(text || '').split('\n');
+  var net = payPick(lines, /נטו\s*ל?\s*תשלום|שכר\s*נטו|נטו\s*לתשלום|net\s*(pay|salary)|take.?home/i, /נטו|net/i, /למס|לביטוח|לפנסיה|ניכוי|מקסימום/);
+  var gross = payPick(lines, /שכר\s*ברוטו|סה["״'׳]?כ\s*ברוטו|סה["״'׳]?כ\s*תשלומים|gross/i, /ברוטו/);
+  if (net && gross && net > gross) gross = null;
+  var month = '', m = String(text).match(/(0?[1-9]|1[0-2])\s*[\/.\-]\s*(20\d{2})/);
+  if (m) month = m[2] + '-' + ('0' + m[1]).slice(-2);
+  else {
+    var low = String(text).toLowerCase();
+    for (var i = 0; i < 12 && !month; i++) {
+      var yy = low.match(new RegExp('(?:' + HE_MONTHS[i] + '|' + EN_MONTHS[i] + ')[a-z]*\\s*[\\-,]?\\s*(20\\d{2})'));
+      if (yy) month = yy[1] + '-' + ('0' + (i + 1)).slice(-2);
+    }
+  }
+  return { net: net, gross: gross, month: month };
+}
+
+function payStatus(msg) { document.getElementById('payStatus').innerText = msg; }
+function scanPayslip(inp) {
+  var file = inp.files[0];
+  if (!file) return;
+  payStatus(t('scan_prepare'));
+  readImage(file).then(function (img) {
+    payImg = drawScaled(img, 1100).toDataURL('image/jpeg', 0.7);
+    var pv = document.getElementById('payPreview');
+    pv.src = payImg; pv.style.display = 'block';
+    payStatus(ocrReady ? t('scan_reading') : t('scan_reading_first'));
+    return runOcr(sharpen(drawScaled(img, 2000)), function (pr) { payStatus(t('scan_reading') + ' ' + Math.round(pr * 100) + '%'); });
+  }).then(function (text) {
+    payRaw = text;
+    document.getElementById('payRaw').value = text;
+    var r = parsePayslip(text);
+    document.getElementById('payNet').value = r.net || '';
+    document.getElementById('payGross').value = r.gross || '';
+    document.getElementById('payM').value = r.month || '';
+    payStatus(r.net ? t('pay_found', { net: fmt(r.net), gross: r.gross ? t('pay_found_gross', { g: fmt(r.gross) }) : '' }) : t('pay_none'));
+  }).catch(function (e) {
+    payStatus(e && e.code === 'no_lib' ? t('scan_nolib') : t('scan_fail'));
+  });
+  inp.value = '';
+}
+
+function payAdd() {
+  var net = parseFloat(val('payNet')), gross = parseFloat(val('payGross')) || 0;
+  if (!(net > 0)) { alert(t('pay_err')); return; }
+  var pm = val('payM') || '';
+  var dupe = entries.some(function (e) { return e.ps && Math.abs(e.amount - net) < 0.005 && (e.ps.m || '') === pm && pm; });
+  if (dupe && !confirm(t('pay_dup', { m: monthName(pm) }))) return;
+  var target = val('payAddMonth') || monthKey(Date.now()), q = target.split('-');
+  var id = target === monthKey(Date.now()) ? Date.now() : new Date(+q[0], +q[1] - 1, 1, 12, 0, 0).getTime();
+  var have = {};
+  entries.forEach(function (e) { have[e.id] = 1; });
+  while (have[id]) id++;
+  var emp = val('payEmployer').trim();
+  var e = { id: id, amount: net, category: 'משכורת', note: t('pay_note') + (emp ? ' · ' + emp : ''), type: 'income',
+    date: new Date(id).toLocaleDateString('he-IL'), ps: { m: pm, g: gross } };
+  if (payImg && document.getElementById('paySaveImg').checked) {
+    try { localStorage.setItem('img_' + id, payImg); e.img = true; } catch (err) { alert(t('err_nospace')); }
+  }
+  entries.unshift(e);
+  entries.sort(function (a, b) { return b.id - a.id; });
+  save();
+  ['payNet', 'payGross', 'payEmployer', 'payM', 'payRaw'].forEach(function (k) { document.getElementById(k).value = ''; });
+  var pv = document.getElementById('payPreview'); pv.style.display = 'none'; pv.removeAttribute('src');
+  payImg = null; payRaw = '';
+  payStatus(t('pay_added', { amt: fmt(net) }));
+  renderPayHist();
+  renderHousing();
+}
+
+function payRemove(id) {
+  if (!confirm(t('pay_del_confirm'))) return;
+  removeEntry(id);
+  renderPayHist();
+}
+function renderPayHist() {
+  var box = document.getElementById('payHist');
+  if (!box) return;
+  var list = entries.filter(function (e) { return e.ps; });
+  if (!list.length) { box.innerHTML = '<div class="muted">' + esc(t('pay_hist_empty')) + '</div>'; return; }
+  box.innerHTML = list.map(function (e) {
+    var title = e.ps.m ? monthName(e.ps.m) : dateStr(e);
+    return '<div class="row"><span><b>' + esc(title) + '</b>' +
+      (e.ps.g ? '<br><span class="muted" style="font-size:14px">' + esc(t('pay_gross_lbl', { g: fmt(e.ps.g) })) + '</span>' : '') + '</span>' +
+      '<span><b class="pos">' + esc(fmt(e.amount)) + '</b>' +
+      (e.img ? '<button class="del" onclick="showReceipt(' + e.id + ')">' + esc(t('pay_view')) + '</button>' : '') +
+      '<button class="del" onclick="payRemove(' + e.id + ')">' + esc(t('delete_btn')) + '</button></span></div>';
+  }).join('');
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && applyRecurring()) { render(); renderRecurring(); renderHousing(); }
+});
+
+// ---- reading a payment notification ----
+function parseNotification(text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim();
+  var num = '(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)';
+  var cur = '(?:₪|ש"ח|ש״ח|שח|NIS|ILS)';
+  var m = text.match(new RegExp(cur + '\\s*' + num)) || text.match(new RegExp(num + '\\s*' + cur, 'i'));
+  var foreign = /(\$|€|£|USD|EUR|GBP|דולר|אירו)/i.test(text);
+  var amount = m ? parseFloat(m[1].replace(/,/g, '')) : null;
+  if (!amount && !foreign) {
+    var m2 = text.match(new RegExp(num));
+    if (m2) amount = parseFloat(m2[1].replace(/,/g, ''));
+  }
+  var merchant = '';
+  var at = text.match(/\b(?:at|@)\s+(.+?)(?:\s+(?:on|with|using)\b|[.,;]|$)/i) ||
+           text.match(/\s(?:ב-|ב־|אצל)\s*(.+?)(?:[.,;]|$)/);
+  if (at) merchant = at[1];
+  if (!merchant) {
+    merchant = text.replace(new RegExp(cur + '\\s*' + num, 'g'), '').replace(new RegExp(num + '\\s*' + cur, 'gi'), '')
+      .replace(/(payment|paid|charged|purchase|תשלום|חיוב|עסקה|בוצעה|בוצע|סה"כ|סה״כ)/gi, '').replace(/[:\-–|]+/g, ' ').trim();
+  }
+  merchant = merchant.replace(/\s+/g, ' ').trim().slice(0, 40);
+  var isRefund = /refund|החזר|זיכוי|ביטול עסקה/i.test(text);
+  return { amount: amount, merchant: merchant, foreign: foreign && !m, refund: isRefund, raw: text };
+}
+
+function quickAdd(text, fromTest, when) {
+  var r = parseNotification(text);
+  if (!r.raw) return;
+  var key = 'q' + r.raw.length + '_' + r.raw.slice(0, 40);
+  var seen = {};
+  try { seen = JSON.parse(localStorage.getItem('quickSeen') || '{}'); } catch (err) {}
+  var now = Date.now();
+  Object.keys(seen).forEach(function (k) { if (now - seen[k] > 600000) delete seen[k]; });
+  if (!fromTest && seen[key]) { toast(t('q_seen')); return; }
+
+  if (!r.amount) {
+    switchTab('expense');
+    document.getElementById('note').value = r.merchant || r.raw.slice(0, 40);
+    toast(r.foreign
+      ? t('q_foreign')
+      : t('q_noamount'));
+    return;
+  }
+  seen[key] = now;
+  try { localStorage.setItem('quickSeen', JSON.stringify(seen)); } catch (err) {}
+
+  var type = r.refund ? 'income' : 'expense';
+  var known = matchMerchant(r.raw, r.merchant);
+  if (known) { r.merchant = known; }
+  var cat = (known && merchants[known] && merchants[known].cat) || guessCategory(r.raw + ' ' + r.merchant) || 'אחר';
+  if (cats[type].indexOf(cat) === -1) cat = 'אחר';
+  var eid = when || Date.now();
+  while (entries.some(function (x) { return x.id === eid; })) eid++;
+  var entry = { id: eid, amount: r.amount, category: cat, note: r.merchant, type: type,
+                date: new Date(eid).toLocaleDateString('he-IL'), auto: true };
+  if (known) { merchants[known].n = (merchants[known].n || 0) + 1; saveMerchants(); }
+  entries.unshift(entry);
+  entries.sort(function (a, b) { return b.id - a.id; });
+  viewMonth = monthKey(entry.id);
+  save();
+  toast(esc(t(type === 'income' ? 'q_added_inc' : 'q_added_exp', {
+      amt: fmt(r.amount), m: r.merchant ? ' (' + r.merchant + ')' : '', cat: catLabel(cat) })) + ' ' +
+    '<button class="del" style="margin:6px 0 0" onclick="undoQuick(' + entry.id + ')">' + esc(t('q_undo')) + '</button>');
+}
+
+function undoQuick(id) {
+  removeEntry(id);
+  toast(t('q_undone'));
+}
+
+function testNotif() {
+  quickAdd(document.getElementById('notifTest').value, true);
+}
+
+function handleLaunchParams() {
+  var q = new URLSearchParams(location.search);
+  var n = q.get('n');
+  if (!n) return;
+  try { history.replaceState(null, '', location.pathname); } catch (err) {}
+  quickAdd(n, false);
+}
+
+try {
+  document.getElementById('autoLink').value = location.origin + location.pathname + '?n=';
+} catch (err) {}
+if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
+
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+applyRecurring();
+applyLang();
+updateNag();
+handleLaunchParams();
+androidInit();
+</script>
+</body>
+</html>
