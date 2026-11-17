@@ -905,7 +905,26 @@ function sharpen(c) {
   return c;
 }
 
-function runOcr(canvas, onProgress) {
+function ocrRows(words) {
+  var w = (words || []).filter(function (x) { return x && x.text && String(x.text).trim() && x.bbox; });
+  if (!w.length) return '';
+  w.forEach(function (x) { x.cy = (x.bbox.y0 + x.bbox.y1) / 2; x.h = x.bbox.y1 - x.bbox.y0; });
+  var hs = w.map(function (x) { return x.h; }).sort(function (a, b) { return a - b; });
+  var tol = Math.max(4, hs[Math.floor(hs.length / 2)] * 0.6);
+  w.sort(function (a, b) { return a.cy - b.cy; });
+  var rows = [];
+  w.forEach(function (x) {
+    var r = rows[rows.length - 1];
+    if (r && Math.abs(x.cy - r.cy) <= tol) { r.w.push(x); r.cy = (r.cy * (r.w.length - 1) + x.cy) / r.w.length; }
+    else rows.push({ cy: x.cy, w: [x] });
+  });
+  return rows.map(function (r) {
+    r.w.sort(function (a, b) { return b.bbox.x0 - a.bbox.x0; });
+    return r.w.map(function (x) { return String(x.text).trim(); }).join(' ');
+  }).join('\n');
+}
+
+function runOcr(canvas, onProgress, wantRows) {
   if (typeof Tesseract === 'undefined') return Promise.reject({ code: 'no_lib' });
   var worker = null;
   return Tesseract.createWorker(ocrLangs(), 1, {
@@ -916,7 +935,9 @@ function runOcr(canvas, onProgress) {
   }).then(function (res) {
     markOcrReady();
     updateWarm();
-    return worker.terminate().then(function () { return res.data.text; });
+    var txt = res.data.text, rowsTxt = '';
+    if (wantRows) { try { rowsTxt = ocrRows(res.data.words); } catch (err) {} }
+    return worker.terminate().then(function () { return rowsTxt ? rowsTxt + '\n' + txt : txt; });
   }).catch(function (e) {
     if (worker) { try { worker.terminate(); } catch (err) {} }
     throw e;
@@ -1729,6 +1750,16 @@ function openSub(name) {
   window.scrollTo(0, 0);
 }
 function toggleSettings() { if (setView) closeSettings(); else openSettings('menu'); }
+window.androidBack = function () {
+  var el;
+  if ((el = document.getElementById('srcModal')) && el.style.display === 'flex') { closeSrc(); return true; }
+  if ((el = document.getElementById('appPicker')) && el.style.display === 'flex') { closeAppPicker(); return true; }
+  if ((el = document.getElementById('viewer')) && el.style.display === 'flex') { closeReceipt(); return true; }
+  if (setView === 'backup' || setView === 'notif' || setView === 'theme') { openSettings('menu'); return true; }
+  if (setView) { closeSettings(); return true; }
+  if (pageIdx !== 1) { showPage(1); return true; }
+  return false;
+};
 function showPage(i) {
   if (setView) { closeSettings(); if (i === pageIdx) return; }
   if (i === pageIdx || i < 0 || i >= PAGES.length) return;
@@ -2217,7 +2248,7 @@ function scanPayslip(inp) {
     pv.src = payImg; pv.style.display = 'block';
     document.getElementById('payClearBtn').style.display = 'inline-block';
     payStatus(ocrReady ? t('scan_reading') : t('scan_reading_first'));
-    return runOcr(sharpen(drawScaled(img, 2000)), function (pr) { payStatus(t('scan_reading') + ' ' + Math.round(pr * 100) + '%'); });
+    return runOcr(sharpen(drawScaled(img, 2000)), function (pr) { payStatus(t('scan_reading') + ' ' + Math.round(pr * 100) + '%'); }, true);
   }).then(function (text) {
     payRaw = text;
     document.getElementById('payRaw').value = text;

@@ -205,8 +205,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        if (web == null) { super.onBackPressed(); return; }
+        web.evaluateJavascript("(window.androidBack?window.androidBack():false)", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String v) {
+                if (!"true".equals(v)) MainActivity.super.onBackPressed();
+            }
+        });
     }
 
     private void toast(final String m) {
