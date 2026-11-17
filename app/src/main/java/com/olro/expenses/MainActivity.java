@@ -226,6 +226,40 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void openApp(String pkg) {
+            try {
+                Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+                if (i != null) {
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public String getApps() {
+            try {
+                Intent q = new Intent(Intent.ACTION_MAIN);
+                q.addCategory(Intent.CATEGORY_LAUNCHER);
+                java.util.List<android.content.pm.ResolveInfo> l = getPackageManager().queryIntentActivities(q, 0);
+                org.json.JSONArray arr = new org.json.JSONArray();
+                java.util.HashSet<String> seen = new java.util.HashSet<>();
+                for (android.content.pm.ResolveInfo ri : l) {
+                    String p = ri.activityInfo.packageName;
+                    if (p.equals(getPackageName()) || !seen.add(p)) continue;
+                    org.json.JSONObject o = new org.json.JSONObject();
+                    o.put("p", p);
+                    o.put("n", String.valueOf(ri.loadLabel(getPackageManager())));
+                    arr.put(o);
+                }
+                return arr.toString();
+            } catch (Exception e) {
+                return "[]";
+            }
+        }
+
+        @JavascriptInterface
         public boolean isListenerEnabled() {
             String s = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
             return s != null && s.contains(getPackageName());
