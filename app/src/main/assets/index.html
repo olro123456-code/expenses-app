@@ -277,7 +277,7 @@ button:disabled{opacity:.35}
   <button onclick="openSettings('notif')" style="display:flex;justify-content:space-between;align-items:center;background:var(--chip);color:var(--text);font-weight:normal;font-size:16px">
     <span>🔔 <span data-i18n="auto_title"></span></span><span aria-hidden="true">‹</span>
   </button>
-  <div class="muted" style="text-align:center;font-size:12px;margin-top:10px">v1.12</div>
+  <div class="muted" style="text-align:center;font-size:12px;margin-top:10px">v1.13</div>
 </div>
 </div>
 
@@ -735,6 +735,8 @@ function adjApply() {
   save();
   closeAdj();
 }
+var openCat = null;
+function toggleCat(i) { var k = (window.catKeys || [])[i]; openCat = openCat === k ? null : k; render(); }
 function removeEntry(id) {
   var gone = entries.filter(function (e) { return e.id === id; })[0];
   if (gone && gone.rec) {
@@ -833,8 +835,22 @@ function render() {
     byCat[e.category] = (byCat[e.category] || 0) + e.amount;
   });
   var pairs = Object.keys(byCat).map(function (k) { return [k, byCat[k]]; });
+  window.catKeys = pairs.map(function (q) { return q[0]; });
+  var catEntries = ms.filter(function (e) { return e.type === currentType; }).sort(function (a, b) { return b.id - a.id; });
   document.getElementById('categorySummary').innerHTML = pairs.length
-    ? pairs.map(function (q) { return '<div class="row"><span>' + esc(catLabel(q[0])) + '</span><b>' + fmt(q[1]) + '</b></div>'; }).join('')
+    ? pairs.map(function (q, i) {
+        var open = openCat === q[0];
+        var h = '<div class="row" style="cursor:pointer" onclick="toggleCat(' + i + ')"><span>' + (open ? '▾ ' : '◂ ') + esc(catLabel(q[0])) + '</span><b>' + fmt(q[1]) + '</b></div>';
+        if (open) {
+          h += '<div style="background:var(--bg);border-radius:12px;padding:4px 10px;margin:2px 0 8px">' + catEntries.filter(function (e) { return e.category === q[0]; }).map(function (e) {
+            return '<div class="row"><span style="min-width:0"><span class="muted" style="font-size:13px">' + esc(dateStr(e)) + '</span>' + (e.note ? '<br>' + esc(e.note) : '') + '</span>' +
+              '<span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><b>' + fmt(e.amount) + '</b>' +
+              (e.src ? '<button class="del" style="margin:0" onclick="showSrc(' + e.id + ')">🔔 ' + esc(t('src_open')) + '</button>' : '') +
+              '<button class="del" style="margin:0" onclick="askRemove(' + e.id + ')">' + esc(t('delete_btn')) + '</button></span></div>';
+          }).join('') + '</div>';
+        }
+        return h;
+      }).join('')
     : '<span class="muted">' + esc(t('no_entries_tab')) + '</span>';
 }
 
